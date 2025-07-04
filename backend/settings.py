@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'apps.manutencao',
     'apps.financeiro',
     'apps.relatorios',
+    'apps.orcamentos',
 ]
 
 MIDDLEWARE = [
@@ -71,3 +72,6 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+]
