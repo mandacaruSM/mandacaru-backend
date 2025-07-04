@@ -9,8 +9,24 @@ interface Cliente {
   nome_fantasia: string;
 }
 
+type ClienteFormData = {
+  razao_social: string;
+  nome_fantasia: string;
+  cnpj: string;
+  inscricao_estadual: string;
+  telefone: string;
+  email: string;
+  rua: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  observacoes: string;
+};
+
 export default function ClienteForm() {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ClienteFormData>({
     razao_social: "",
     nome_fantasia: "",
     cnpj: "",
@@ -106,7 +122,7 @@ export default function ClienteForm() {
             <label className="block text-sm font-medium mb-1">{label}</label>
             <input
               name={name}
-              value={(formData as any)[name]}
+              value={formData[name as keyof ClienteFormData]}
               onChange={handleChange}
               required={name !== "inscricao_estadual" && name !== "numero" && name !== "observacoes"}
               className="w-full p-2 rounded-md bg-gray-700 border border-gray-600 text-white"
