@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'apps.core',
     'apps.clientes',
+    'apps.empreendimentos',
     'apps.equipamentos',
     'apps.ordens_servico',
     'apps.almoxarifado',
