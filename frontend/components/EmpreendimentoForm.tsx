@@ -1,7 +1,6 @@
-
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, ChangeEvent, FormEvent } from "react";
 
 interface Cliente {
   id: number;
@@ -18,10 +17,18 @@ interface Empreendimento {
   distancia_km: string;
 }
 
+interface EmpreendimentoFormData {
+  nome: string;
+  cliente: string;
+  localizacao: string;
+  descricao: string;
+  distancia_km: string;
+}
+
 export default function EmpreendimentoForm() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EmpreendimentoFormData>({
     nome: "",
     cliente: "",
     localizacao: "",
@@ -46,11 +53,11 @@ export default function EmpreendimentoForm() {
     fetchEmpreendimentos();
   }, []);
 
-  const handleChange = (e: any) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/empreendimentos/`, {
       method: "POST",
