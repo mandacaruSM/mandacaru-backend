@@ -7,6 +7,21 @@ services:
     autoDeploy: true
     envVars:
       - key: SECRET_KEY
-        value: changeme-123
+        generateValue: true
       - key: DEBUG
         value: False
+      - key: ALLOWED_HOSTS
+        value: mandacaru-backend-i2ci.onrender.com
+      - key: DATABASE_URL
+        value: "sqlite:///db.sqlite3" # You should use a managed database like PostgreSQL on Render
+
+  - type: web
+    name: mandacaru-frontend
+    env: node
+    plan: free
+    buildCommand: "cd frontend && npm install && npm run build"
+    startCommand: "cd frontend && npm start"
+    autoDeploy: true
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://mandacaru-backend-i2ci.onrender.com

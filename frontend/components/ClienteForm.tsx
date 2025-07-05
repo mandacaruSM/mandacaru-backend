@@ -51,7 +51,8 @@ export default function ClienteForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const res = await fetch(`${apiUrl}/api/clientes/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -86,7 +87,8 @@ export default function ClienteForm() {
 
   const fetchClientes = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/clientes/");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const res = await fetch(`${apiUrl}/api/clientes/`);
       if (res.ok) {
         const data = await res.json();
         setClientes(data);

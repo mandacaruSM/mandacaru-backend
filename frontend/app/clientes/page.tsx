@@ -20,14 +20,16 @@ export default function ClientesPage() {
   const [form, setForm] = useState<Partial<Cliente>>({});
 
   const fetchClientes = async () => {
-    const res = await fetch("http://localhost:8000/api/clientes/");
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const res = await fetch(`${apiUrl}/api/clientes/`);
     const data = await res.json();
     setClientes(data);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch("http://localhost:8000/api/clientes/", {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    await fetch(`${apiUrl}/api/clientes/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
