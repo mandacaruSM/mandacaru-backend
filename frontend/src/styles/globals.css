@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* estilos globais opcionais */
+body {
+  @apply bg-[#fefcf9] text-zinc-900;
+}
