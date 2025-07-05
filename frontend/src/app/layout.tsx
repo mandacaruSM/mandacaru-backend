@@ -1,5 +1,7 @@
 import "../styles/globals.css";
 import { Inter } from "next/font/google";
+import Image from "next/image";
+import logo from "@/public/logo_mandacaru.png.png";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -35,7 +37,9 @@ function Sidebar() {
 
   return (
     <aside className="w-60 bg-green-900 text-white flex flex-col items-center py-4">
-      <img src="/logo_mandacaru.png" alt="Mandacaru Logo" className="w-32 mb-4" />
+      <div className="w-32 mb-4">
+        <Image src={logo} alt="Mandacaru Logo" width={128} height={128} />
+      </div>
       <h1 className="text-lg font-bold mb-6">Mandacaru ERP</h1>
       <nav className="flex flex-col gap-4 w-full px-4">
         {menu.map((item) => (
