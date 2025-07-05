@@ -9,7 +9,9 @@ interface Cliente {
   cnpj: string;
   email: string;
   telefone: string;
-  endereco: string;
+  rua: string;
+  numero: string;
+  bairro: string;
   cidade: string;
   estado: string;
   cep: string;
@@ -73,9 +75,21 @@ export default function ClientesPage() {
         />
         <input
           className="border p-2 rounded"
-          placeholder="Endereço"
-          value={form.endereco || ""}
-          onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+          placeholder="Rua"
+          value={form.rua || ""}
+          onChange={(e) => setForm({ ...form, rua: e.target.value })}
+        />
+        <input
+          className="border p-2 rounded"
+          placeholder="Número"
+          value={form.numero || ""}
+          onChange={(e) => setForm({ ...form, numero: e.target.value })}
+        />
+        <input
+          className="border p-2 rounded"
+          placeholder="Bairro"
+          value={form.bairro || ""}
+          onChange={(e) => setForm({ ...form, bairro: e.target.value })}
         />
         <input
           className="border p-2 rounded"
@@ -108,7 +122,7 @@ export default function ClientesPage() {
           <li key={cliente.id} className="p-4 border rounded shadow">
             <p className="font-bold">{cliente.razao_social}</p>
             <p>{cliente.cnpj} - {cliente.email} - {cliente.telefone}</p>
-            <p>{cliente.endereco}, {cliente.cidade} - {cliente.estado} ({cliente.cep})</p>
+            <p>{cliente.rua}, {cliente.numero} - {cliente.bairro}, {cliente.cidade} - {cliente.estado} ({cliente.cep})</p>
           </li>
         ))}
       </ul>
