@@ -51,7 +51,7 @@ export default function ClienteForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("http://localhost:8000/api/clientes/", {
+      const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
