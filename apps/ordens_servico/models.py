@@ -1,5 +1,6 @@
 from django.db import models
-from apps.clientes.models import Cliente, Empreendimento
+from apps.clientes.models import Cliente
+from apps.empreendimentos.models import Empreendimento
 from apps.equipamentos.models import Equipamento
 
 class OrdemServico(models.Model):

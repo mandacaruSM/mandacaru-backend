@@ -1,11 +1,6 @@
 from rest_framework import serializers
-from .models import Cliente, Empreendimento
-
-class EmpreendimentoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Empreendimento
-        fields = '__all__'
-
+from .models import Cliente
+from apps.empreendimentos.serializers import EmpreendimentoSerializer
 
 class ClienteSerializer(serializers.ModelSerializer):
     empreendimentos = EmpreendimentoSerializer(many=True, read_only=True)
