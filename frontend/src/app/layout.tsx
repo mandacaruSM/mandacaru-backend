@@ -1,7 +1,7 @@
 import "../styles/globals.css";
 import { Inter } from "next/font/google";
 import Image from "next/image";
-import logo from "@/src/public/logo_mandacaru.png";
+import logo from "../../public/logo_mandacaru.png";
 
 const inter = Inter({ subsets: ["latin"] });
 
