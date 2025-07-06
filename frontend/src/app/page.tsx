@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -29,17 +30,28 @@ const modules = [
 
 export default function Home() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-      {modules.map((mod, index) => (
-        <Link
-          key={index}
-          href={mod.href}
-          className="bg-white border border-green-100 p-6 rounded-2xl shadow hover:shadow-lg flex items-center gap-4"
-        >
-          <div>{mod.icon}</div>
-          <div className="text-lg font-semibold text-green-900">{mod.name}</div>
-        </Link>
-      ))}
+    <div className="min-h-screen bg-[#fefcf9]">
+      {/* Topbar */}
+      <header className="bg-orange-500 text-white px-6 py-4 flex justify-between items-center shadow">
+        <h1 className="text-xl font-bold">Mandacaru ERP 🌵</h1>
+        <button className="bg-green-800 px-3 py-1 text-sm rounded-full hover:bg-green-700">
+          Sair
+        </button>
+      </header>
+
+      {/* Cards */}
+      <main className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto mt-4">
+        {modules.map((mod, index) => (
+          <Link
+            key={index}
+            href={mod.href}
+            className="bg-white p-5 rounded-2xl shadow-md hover:shadow-xl border border-green-100 flex items-center gap-4"
+          >
+            <div>{mod.icon}</div>
+            <div className="text-lg font-semibold text-green-900">{mod.name}</div>
+          </Link>
+        ))}
+      </main>
     </div>
   );
 }
