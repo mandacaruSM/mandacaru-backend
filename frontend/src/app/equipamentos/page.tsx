@@ -1,55 +1,98 @@
+// /src/app/equipamentos/page.tsx
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface Equipamento {
   id: number;
   nome: string;
-  tipo: string;
-  fabricante?: string;
   cliente_nome: string;
   empreendimento_nome: string;
+  modelo: string;
+  numero_serie: string;
 }
 
-export default function EquipamentosPage() {
+export default function ListaEquipamentos() {
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
 
   useEffect(() => {
     fetch("https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/")
       .then((res) => res.json())
-      .then(setEquipamentos);
+      .then((data) => setEquipamentos(data))
+      .catch(() => alert("Erro ao carregar equipamentos."));
   }, []);
 
+  const handleDelete = async (id: number) => {
+    if (confirm("Deseja realmente excluir este equipamento?")) {
+      const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/${id}/`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setEquipamentos(equipamentos.filter((e) => e.id !== id));
+      } else {
+        alert("Erro ao excluir equipamento.");
+      }
+    }
+  };
+
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-green-800">Equipamentos</h1>
         <div className="flex gap-2">
-          <Link href="/" className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400">
-            🏠 Home
+          <Link
+            href="/"
+            className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400"
+          >
+            🏠 Início
           </Link>
-          <Link href="/equipamentos/novo" className="bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800">
-            + Novo
+          <Link
+            href="/equipamentos/novo"
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          >
+            + Novo Equipamento
           </Link>
         </div>
       </div>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {equipamentos.map((e) => (
-          <div key={e.id} className="border p-4 rounded shadow">
-            <h2 className="font-semibold">{e.nome} ({e.tipo})</h2>
-            <p>Cliente: {e.cliente_nome}</p>
-            <p>Empreendimento: {e.empreendimento_nome}</p>
-            <p>Fabricante: {e.fabricante || "—"}</p>
-            <Link
-              href={`/equipamentos/editar/${e.id}`}
-              className="text-blue-600 underline mt-2 inline-block"
-            >
-              ✏️ Editar
-            </Link>
-          </div>
-        ))}
-      </div>
+
+      <table className="w-full border text-sm">
+        <thead>
+          <tr className="bg-green-100">
+            <th className="border p-2 text-left">Nome</th>
+            <th className="border p-2 text-left">Cliente</th>
+            <th className="border p-2 text-left">Empreendimento</th>
+            <th className="border p-2 text-left">Modelo</th>
+            <th className="border p-2 text-left">Nº Série</th>
+            <th className="border p-2 text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {equipamentos.map((e) => (
+            <tr key={e.id} className="border-b hover:bg-green-50">
+              <td className="border p-2">{e.nome}</td>
+              <td className="border p-2">{e.cliente_nome}</td>
+              <td className="border p-2">{e.empreendimento_nome}</td>
+              <td className="border p-2">{e.modelo}</td>
+              <td className="border p-2">{e.numero_serie}</td>
+              <td className="border p-2 text-center space-x-2">
+                <Link
+                  href={`/equipamentos/editar/${e.id}`}
+                  className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                >
+                  Editar
+                </Link>
+                <button
+                  onClick={() => handleDelete(e.id)}
+                  className="bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
+                >
+                  Excluir
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

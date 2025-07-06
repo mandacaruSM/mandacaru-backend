@@ -9,9 +9,16 @@ interface Cliente {
   nome_fantasia: string;
 }
 
+interface Empreendimento {
+  id: number;
+  nome: string;
+  cliente: number;
+}
+
 export default function NovoEquipamentoPage() {
   const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
   const [formData, setFormData] = useState({
     nome: "",
     cliente: "",
@@ -26,7 +33,22 @@ export default function NovoEquipamentoPage() {
       .then((data: Cliente[]) => setClientes(data));
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  useEffect(() => {
+    if (formData.cliente) {
+      fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/")
+        .then((res) => res.json())
+        .then((data: Empreendimento[]) => {
+          const filtrados = data.filter((e) => e.cliente === parseInt(formData.cliente));
+          setEmpreendimentos(filtrados);
+        });
+    } else {
+      setEmpreendimentos([]);
+    }
+  }, [formData.cliente]);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -53,6 +75,7 @@ export default function NovoEquipamentoPage() {
           className="w-full border rounded p-2"
           required
         />
+
         <select
           name="cliente"
           value={formData.cliente}
@@ -67,15 +90,22 @@ export default function NovoEquipamentoPage() {
             </option>
           ))}
         </select>
-        <input
-          type="text"
+
+        <select
           name="empreendimento"
-          placeholder="ID do empreendimento"
           value={formData.empreendimento}
           onChange={handleChange}
           className="w-full border rounded p-2"
           required
-        />
+        >
+          <option value="">Selecione o empreendimento</option>
+          {empreendimentos.map((emp) => (
+            <option key={emp.id} value={emp.id}>
+              {emp.nome}
+            </option>
+          ))}
+        </select>
+
         <input
           type="text"
           name="modelo"
@@ -84,6 +114,7 @@ export default function NovoEquipamentoPage() {
           onChange={handleChange}
           className="w-full border rounded p-2"
         />
+
         <input
           type="text"
           name="numero_serie"
@@ -92,6 +123,7 @@ export default function NovoEquipamentoPage() {
           onChange={handleChange}
           className="w-full border rounded p-2"
         />
+
         <div className="flex justify-between">
           <button
             type="button"
