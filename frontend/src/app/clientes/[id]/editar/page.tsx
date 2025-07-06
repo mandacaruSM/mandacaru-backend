@@ -1,117 +1,111 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+interface Cliente {
+  id?: number;
+  razao_social: string;
+  nome_fantasia?: string;
+  cnpj: string;
+  inscricao_estadual?: string;
+  email?: string;
+  telefone?: string;
+  rua: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  observacoes?: string;
+}
 
 export default function EditarCliente() {
   const { id } = useParams();
   const router = useRouter();
-
-  const [formData, setFormData] = useState({
-    razao_social: "",
-    nome_fantasia: "",
-    cnpj: "",
-    inscricao_estadual: "",
-    email: "",
-    telefone: "",
-    rua: "",
-    numero: "",
-    bairro: "",
-    cidade: "",
-    estado: "",
-    cep: "",
-    observacoes: "",
-  });
+  const [formData, setFormData] = useState<Cliente | null>(null);
 
   useEffect(() => {
-    async function fetchCliente() {
-      try {
-        const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`);
-        const data = await res.json();
-        setFormData(data);
-      } catch (error) {
-        alert("Erro ao carregar cliente");
-      }
-    }
-    if (id) fetchCliente();
+    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`)
+      .then((res) => res.json())
+      .then((data: Cliente) => setFormData(data))
+      .catch(() => alert("Erro ao carregar cliente."));
   }, [id]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    if (formData) {
+      setFormData({ ...formData, [e.target.name]: e.target.value });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData) return;
+
     try {
-      const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      const res = await fetch(
+        `https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        }
+      );
 
       if (res.ok) {
         alert("Cliente atualizado com sucesso!");
         router.push("/clientes");
       } else {
-        const err = await res.json();
-        alert("Erro ao atualizar:\n" + JSON.stringify(err, null, 2));
+        const erro = await res.json();
+        alert("Erro ao atualizar: " + JSON.stringify(erro));
       }
     } catch {
-      alert("Erro de conexão com o servidor.");
+      alert("Erro ao enviar dados para o servidor.");
     }
   };
 
+  if (!formData) return <div className="p-6">Carregando...</div>;
+
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h2 className="text-2xl font-bold mb-4 text-blue-800">Editar Cliente</h2>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          { name: "razao_social", label: "Razão Social" },
-          { name: "nome_fantasia", label: "Nome Fantasia" },
-          { name: "cnpj", label: "CNPJ" },
-          { name: "inscricao_estadual", label: "Inscrição Estadual" },
-          { name: "email", label: "Email" },
-          { name: "telefone", label: "Telefone" },
-          { name: "rua", label: "Rua" },
-          { name: "numero", label: "Número" },
-          { name: "bairro", label: "Bairro" },
-          { name: "cidade", label: "Cidade" },
-          { name: "estado", label: "Estado" },
-          { name: "cep", label: "CEP" },
-        ].map((field) => (
-          <div key={field.name}>
-            <label className="block text-sm font-medium mb-1" htmlFor={field.name}>
-              {field.label}
-            </label>
-            <input
-              type="text"
-              name={field.name}
-              value={(formData as any)[field.name]}
-              onChange={handleChange}
-              className="w-full border px-3 py-2 rounded"
-              required={field.name === "razao_social" || field.name === "cnpj" || field.name === "rua"}
-            />
-          </div>
-        ))}
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-4">Editar Cliente</h2>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {Object.entries(formData).map(([campo, valor]) => {
+          if (campo === "id") return null;
 
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-1" htmlFor="observacoes">
-            Observações
-          </label>
-          <textarea
-            name="observacoes"
-            value={formData.observacoes}
-            onChange={handleChange}
-            className="w-full border px-3 py-2 rounded"
-            rows={4}
-          />
-        </div>
+          const label = campo.replace(/_/g, " ").toUpperCase();
 
-        <div className="md:col-span-2 flex justify-end mt-4">
-          <button type="submit" className="bg-blue-700 text-white px-6 py-2 rounded hover:bg-blue-800">
-            Atualizar Cliente
-          </button>
-        </div>
+          return (
+            <div key={campo}>
+              <label className="block text-sm font-medium">{label}</label>
+              {campo === "observacoes" ? (
+                <textarea
+                  name={campo}
+                  className="w-full border px-3 py-2 rounded"
+                  value={String(valor ?? "")}
+                  onChange={handleChange}
+                />
+              ) : (
+                <input
+                  type="text"
+                  name={campo}
+                  className="w-full border px-3 py-2 rounded"
+                  value={String(valor ?? "")}
+                  onChange={handleChange}
+                />
+              )}
+            </div>
+          );
+        })}
+
+        <button
+          type="submit"
+          className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600"
+        >
+          Atualizar
+        </button>
       </form>
     </div>
   );
