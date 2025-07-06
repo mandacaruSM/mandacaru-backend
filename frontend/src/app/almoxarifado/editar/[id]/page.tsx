@@ -20,7 +20,8 @@ export default function EditarProdutoPage() {
       .then((data) => setFormData(data));
   }, [id]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleChange = (e: any) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 

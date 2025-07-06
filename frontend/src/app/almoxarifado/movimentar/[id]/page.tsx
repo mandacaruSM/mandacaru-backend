@@ -4,11 +4,19 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+interface Produto {
+  id: number;
+  codigo: string;
+  descricao: string;
+  unidade_medida: string;
+  estoque_atual: string;
+}
+
 export default function MovimentarProdutoPage() {
   const { id } = useParams();
   const router = useRouter();
 
-  const [produto, setProduto] = useState<any>(null);
+  const [produto, setProduto] = useState<Produto | null>(null);
   const [formData, setFormData] = useState({
     tipo: "ENTRADA",
     quantidade: "",
