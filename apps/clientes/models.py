@@ -7,7 +7,6 @@ class Cliente(models.Model):
     inscricao_estadual = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     telefone = models.CharField(max_length=20, blank=True, null=True)
-
     rua = models.CharField(max_length=255)
     numero = models.CharField(max_length=10)
     bairro = models.CharField(max_length=100)
