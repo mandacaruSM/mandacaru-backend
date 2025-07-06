@@ -1,70 +1,117 @@
-// app/clientes/[id]/editar/page.tsx
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 
 export default function EditarCliente() {
   const { id } = useParams();
   const router = useRouter();
+
   const [formData, setFormData] = useState({
     razao_social: "",
     nome_fantasia: "",
     cnpj: "",
     inscricao_estadual: "",
-    telefone: "",
     email: "",
-    endereco: "",
+    telefone: "",
+    rua: "",
+    numero: "",
+    bairro: "",
     cidade: "",
     estado: "",
     cep: "",
+    observacoes: "",
   });
 
   useEffect(() => {
-    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`)
-      .then((res) => res.json())
-      .then((data) => setFormData(data))
-      .catch((err) => console.error("Erro ao buscar cliente:", err));
+    async function fetchCliente() {
+      try {
+        const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`);
+        const data = await res.json();
+        setFormData(data);
+      } catch (error) {
+        alert("Erro ao carregar cliente");
+      }
+    }
+    if (id) fetchCliente();
   }, [id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
+    try {
+      const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
-    if (response.ok) {
-      router.push("/clientes");
-    } else {
-      alert("Erro ao atualizar cliente");
+      if (res.ok) {
+        alert("Cliente atualizado com sucesso!");
+        router.push("/clientes");
+      } else {
+        const err = await res.json();
+        alert("Erro ao atualizar:\n" + JSON.stringify(err, null, 2));
+      }
+    } catch {
+      alert("Erro de conexão com o servidor.");
     }
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4 text-blue-800">Editar Cliente #{id}</h2>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <input name="razao_social" placeholder="Razão Social" value={formData.razao_social} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <input name="nome_fantasia" placeholder="Nome Fantasia" value={formData.nome_fantasia} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <input name="cnpj" placeholder="CNPJ" value={formData.cnpj} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <input name="inscricao_estadual" placeholder="Inscrição Estadual" value={formData.inscricao_estadual} onChange={handleChange} className="border px-3 py-2 rounded" />
-        <input name="telefone" placeholder="Telefone" value={formData.telefone} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <input name="email" placeholder="Email" type="email" value={formData.email} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <input name="cidade" placeholder="Cidade" value={formData.cidade} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <input name="estado" placeholder="UF" value={formData.estado} maxLength={2} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <input name="cep" placeholder="CEP" value={formData.cep} onChange={handleChange} required className="border px-3 py-2 rounded" />
-        <textarea name="endereco" placeholder="Endereço Completo" value={formData.endereco} onChange={handleChange} rows={2} className="border px-3 py-2 rounded col-span-full" />
+    <div className="max-w-2xl mx-auto p-6">
+      <h2 className="text-2xl font-bold mb-4 text-blue-800">Editar Cliente</h2>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[
+          { name: "razao_social", label: "Razão Social" },
+          { name: "nome_fantasia", label: "Nome Fantasia" },
+          { name: "cnpj", label: "CNPJ" },
+          { name: "inscricao_estadual", label: "Inscrição Estadual" },
+          { name: "email", label: "Email" },
+          { name: "telefone", label: "Telefone" },
+          { name: "rua", label: "Rua" },
+          { name: "numero", label: "Número" },
+          { name: "bairro", label: "Bairro" },
+          { name: "cidade", label: "Cidade" },
+          { name: "estado", label: "Estado" },
+          { name: "cep", label: "CEP" },
+        ].map((field) => (
+          <div key={field.name}>
+            <label className="block text-sm font-medium mb-1" htmlFor={field.name}>
+              {field.label}
+            </label>
+            <input
+              type="text"
+              name={field.name}
+              value={(formData as any)[field.name]}
+              onChange={handleChange}
+              className="w-full border px-3 py-2 rounded"
+              required={field.name === "razao_social" || field.name === "cnpj" || field.name === "rua"}
+            />
+          </div>
+        ))}
 
-        <button type="submit" className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600 col-span-full">
-          Atualizar Cliente
-        </button>
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium mb-1" htmlFor="observacoes">
+            Observações
+          </label>
+          <textarea
+            name="observacoes"
+            value={formData.observacoes}
+            onChange={handleChange}
+            className="w-full border px-3 py-2 rounded"
+            rows={4}
+          />
+        </div>
+
+        <div className="md:col-span-2 flex justify-end mt-4">
+          <button type="submit" className="bg-blue-700 text-white px-6 py-2 rounded hover:bg-blue-800">
+            Atualizar Cliente
+          </button>
+        </div>
       </form>
     </div>
   );

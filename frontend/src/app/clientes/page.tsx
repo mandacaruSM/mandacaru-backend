@@ -13,7 +13,7 @@ export default function ListaClientes() {
   const [recarregar, setRecarregar] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/clientes/")
+    fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
       .then((res) => res.json())
       .then((data) => setClientes(data))
       .catch((err) => console.error("Erro ao carregar clientes:", err));
