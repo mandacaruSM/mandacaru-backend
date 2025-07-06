@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 interface Manutencao {
   id: number;
@@ -15,7 +14,6 @@ interface Manutencao {
 
 export default function ListaManutencoes() {
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([]);
-  const router = useRouter();
 
   useEffect(() => {
     fetch("https://mandacaru-backend-i2ci.onrender.com/api/manutencoes/")
