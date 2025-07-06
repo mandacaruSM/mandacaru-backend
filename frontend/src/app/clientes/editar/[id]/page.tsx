@@ -27,10 +27,12 @@ export default function EditarCliente() {
   const [formData, setFormData] = useState<Cliente | null>(null);
 
   useEffect(() => {
-    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`)
-      .then((res) => res.json())
-      .then((data) => setFormData(data))
-      .catch(() => alert("Erro ao carregar cliente."));
+    if (typeof id === "string") {
+      fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`)
+        .then((res) => res.json())
+        .then((data) => setFormData(data))
+        .catch(() => alert("Erro ao carregar cliente."));
+    }
   }, [id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -41,13 +43,15 @@ export default function EditarCliente() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData) return;
+    if (!formData || typeof id !== "string") return;
+
     try {
       const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
+
       if (res.ok) {
         alert("Cliente atualizado!");
         router.push("/clientes");
@@ -60,7 +64,7 @@ export default function EditarCliente() {
     }
   };
 
-  if (!formData) return <div>Carregando...</div>;
+  if (!formData) return <div className="p-4">Carregando...</div>;
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -71,7 +75,7 @@ export default function EditarCliente() {
         </Link>
       </div>
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {Object.keys(formData).map((campo) => (
+        {Object.entries(formData).map(([campo, valor]) => (
           <div key={campo} className="col-span-1">
             <label className="block text-sm font-medium capitalize mb-1">
               {campo.replace("_", " ")}
@@ -80,7 +84,7 @@ export default function EditarCliente() {
               <textarea
                 name={campo}
                 className="w-full border px-2 py-1 text-sm rounded"
-                value={formData[campo as keyof Cliente] || ""}
+                value={valor ?? ""}
                 onChange={handleChange}
               />
             ) : (
@@ -88,7 +92,7 @@ export default function EditarCliente() {
                 name={campo}
                 type="text"
                 className="w-full border px-2 py-1 text-sm rounded"
-                value={formData[campo as keyof Cliente] || ""}
+                value={valor ?? ""}
                 onChange={handleChange}
               />
             )}

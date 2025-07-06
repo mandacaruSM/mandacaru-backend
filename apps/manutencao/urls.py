@@ -1,10 +1,9 @@
-from django.urls import path, include
+# apps/manutencao/urls.py
+
 from rest_framework.routers import DefaultRouter
 from .views import HistoricoManutencaoViewSet
 
 router = DefaultRouter()
-router.register(r'', HistoricoManutencaoViewSet)
+router.register(r"", HistoricoManutencaoViewSet)
 
-urlpatterns = [
-    path('', include(router.urls)),
-]
+urlpatterns = router.urls

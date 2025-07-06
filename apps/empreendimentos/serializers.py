@@ -2,8 +2,6 @@ from rest_framework import serializers
 from .models import Empreendimento
 
 class EmpreendimentoSerializer(serializers.ModelSerializer):
-    cliente_nome = serializers.CharField(source="cliente.nome_fantasia", read_only=True)
-
     class Meta:
         model = Empreendimento
         fields = '__all__'
