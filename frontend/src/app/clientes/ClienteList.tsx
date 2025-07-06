@@ -1,52 +1,108 @@
 "use client";
 
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
 interface Cliente {
-  id: number;
+  id?: number;
   razao_social: string;
   nome_fantasia?: string;
+  cnpj: string;
+  inscricao_estadual?: string;
+  email?: string;
+  telefone?: string;
+  rua: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  observacoes?: string;
 }
 
-export default function ClienteList({ recarregar }: { recarregar: boolean }) {
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function EditarCliente() {
+  const { id } = useParams();
+  const router = useRouter();
+  const [formData, setFormData] = useState<Cliente | null>(null);
 
   useEffect(() => {
-    const fetchClientes = async () => {
-      try {
-        const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/");
-        if (!res.ok) throw new Error("Erro na requisição");
-        const data = await res.json();
-        setClientes(data);
-      } catch (error) {
-        console.error("Erro ao carregar clientes:", error);
-        alert("Erro ao carregar clientes.");
-      } finally {
-        setLoading(false);
+    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`)
+      .then((res) => res.json())
+      .then((data) => setFormData(data))
+      .catch(() => alert("Erro ao carregar cliente."));
+  }, [id]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (formData) {
+      setFormData({ ...formData, [e.target.name]: e.target.value });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData) return;
+    try {
+      const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      if (res.ok) {
+        alert("Cliente atualizado!");
+        router.push("/clientes");
+      } else {
+        const erro = await res.json();
+        alert("Erro: " + JSON.stringify(erro));
       }
-    };
+    } catch {
+      alert("Erro ao salvar.");
+    }
+  };
 
-    fetchClientes();
-  }, [recarregar]);
-
-  if (loading) return <div>Carregando...</div>;
-  if (!clientes.length) return <div className="text-gray-600">Nenhum cliente cadastrado.</div>;
+  if (!formData) return <div>Carregando...</div>;
 
   return (
-    <ul className="space-y-2">
-      {clientes.map((cliente) => (
-        <li key={cliente.id} className="bg-white p-4 rounded shadow hover:shadow-md flex justify-between">
-          <span className="text-lg font-semibold">{cliente.razao_social}</span>
-          <Link
-            href={`/clientes/${cliente.id}/editar`}
-            className="text-sm text-blue-600 hover:underline"
+    <div className="max-w-4xl mx-auto p-4">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold">Editar Cliente</h2>
+        <Link href="/" className="bg-gray-200 text-gray-800 px-3 py-1 rounded hover:bg-gray-300">
+          🏠 Home
+        </Link>
+      </div>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {Object.keys(formData).map((campo) => (
+          <div key={campo} className="col-span-1">
+            <label className="block text-sm font-medium capitalize mb-1">
+              {campo.replace("_", " ")}
+            </label>
+            {campo === "observacoes" ? (
+              <textarea
+                name={campo}
+                className="w-full border px-2 py-1 text-sm rounded"
+                value={formData[campo as keyof Cliente] || ""}
+                onChange={handleChange}
+              />
+            ) : (
+              <input
+                name={campo}
+                type="text"
+                className="w-full border px-2 py-1 text-sm rounded"
+                value={formData[campo as keyof Cliente] || ""}
+                onChange={handleChange}
+              />
+            )}
+          </div>
+        ))}
+        <div className="col-span-2">
+          <button
+            type="submit"
+            className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600 w-full md:w-auto"
           >
-            Editar
-          </Link>
-        </li>
-      ))}
-    </ul>
+            Atualizar
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
