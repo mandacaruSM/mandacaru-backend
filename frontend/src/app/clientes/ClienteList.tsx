@@ -24,10 +24,9 @@ export default function ClienteList({ recarregar }: { recarregar: boolean }) {
       try {
         const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/");
         if (!res.ok) throw new Error("Erro ao buscar clientes");
-        const data = await res.json();
+        const data: Cliente[] = await res.json();
         setClientes(data);
-      } catch (err: any) {
-        console.error(err);
+      } catch {
         setErro("Não foi possível carregar os clientes.");
       }
     };
@@ -44,8 +43,8 @@ export default function ClienteList({ recarregar }: { recarregar: boolean }) {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Erro ao excluir");
-      setClientes(clientes.filter((cliente) => cliente.id !== id));
-    } catch (err) {
+      setClientes((prev) => prev.filter((cliente) => cliente.id !== id));
+    } catch {
       alert("Erro ao excluir cliente.");
     }
   };
