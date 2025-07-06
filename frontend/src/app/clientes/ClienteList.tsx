@@ -75,7 +75,7 @@ export default function ClienteList({ recarregar }: ClienteListProps) {
               <td className="border px-2 py-1">{cliente.cidade} / {cliente.estado}</td>
               <td className="border px-2 py-1">
                 <Link
-                  href={`/clientes/${cliente.id}/editar`}
+                  href={`/clientes/editar/${cliente.id}`}
                   className="text-blue-600 hover:underline"
                 >
                   Editar
