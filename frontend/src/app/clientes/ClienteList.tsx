@@ -1,71 +1,62 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface Cliente {
   id: number;
   razao_social: string;
-  nome_fantasia: string;
+  nome_fantasia?: string;
+  cnpj: string;
 }
 
-export default function ClienteList({ recarregar = false }: { recarregar?: boolean }) {
+export default function ClienteList({ recarregar }: { recarregar: boolean }) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
 
-  const carregarClientes = async () => {
-    try {
-      const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/");
-      const data = await res.json();
-      setClientes(data);
-    } catch (err) {
-      console.error("Erro ao carregar clientes:", err);
-    }
-  };
-
-  const excluirCliente = async (id: number) => {
-    const confirmar = confirm("Tem certeza que deseja excluir este cliente?");
-    if (!confirmar) return;
-
-    try {
-      const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        alert("Cliente excluído com sucesso.");
-        carregarClientes();
-      } else {
-        alert("Erro ao excluir cliente.");
-      }
-    } catch (err) {
-      alert("Erro de conexão ao excluir.");
-    }
-  };
-
   useEffect(() => {
-    carregarClientes();
+    fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
+      .then((res) => res.json())
+      .then((data) => setClientes(data))
+      .catch(() => {
+        alert("Erro ao carregar clientes");
+      });
   }, [recarregar]);
 
+  const excluirCliente = async (id: number) => {
+    if (confirm("Tem certeza que deseja excluir?")) {
+      try {
+        const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/clientes/${id}/`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          setClientes(clientes.filter((c) => c.id !== id));
+        }
+      } catch {
+        alert("Erro ao excluir cliente.");
+      }
+    }
+  };
+
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-2">
       {clientes.map((cliente) => (
         <li key={cliente.id} className="bg-white p-4 rounded shadow hover:shadow-md">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between">
             <div>
-              <div className="text-lg font-semibold text-green-800">
-                {cliente.nome_fantasia || cliente.razao_social}
-              </div>
-              <div className="text-sm text-gray-500">{cliente.razao_social}</div>
+              <div className="text-lg font-semibold">{cliente.razao_social}</div>
+              <div className="text-sm text-gray-500">{cliente.nome_fantasia}</div>
+              <div className="text-sm text-gray-400">{cliente.cnpj}</div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-4 items-center">
               <Link
                 href={`/clientes/${cliente.id}/editar`}
-                className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-500"
+                className="text-sm text-blue-600 hover:underline"
               >
                 Editar
               </Link>
               <button
                 onClick={() => excluirCliente(cliente.id)}
-                className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-500"
+                className="text-sm text-red-600 hover:underline"
               >
                 Excluir
               </button>

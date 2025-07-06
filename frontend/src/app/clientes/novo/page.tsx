@@ -3,10 +3,25 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+interface Cliente {
+  razao_social: string;
+  nome_fantasia?: string;
+  cnpj: string;
+  inscricao_estadual?: string;
+  email?: string;
+  telefone?: string;
+  rua: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  observacoes?: string;
+}
+
 export default function NovoCliente() {
   const router = useRouter();
-
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Cliente>({
     razao_social: "",
     nome_fantasia: "",
     cnpj: "",
@@ -22,10 +37,6 @@ export default function NovoCliente() {
     observacoes: "",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -34,70 +45,50 @@ export default function NovoCliente() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
       if (res.ok) {
-        alert("Cliente cadastrado com sucesso!");
+        alert("Cliente cadastrado!");
         router.push("/clientes");
       } else {
-        const errorData = await res.json();
-        alert("Erro ao cadastrar cliente:\n" + JSON.stringify(errorData, null, 2));
+        const erro = await res.json();
+        alert("Erro: " + JSON.stringify(erro));
       }
-    } catch (error) {
-      alert("Erro ao conectar com o servidor.");
+    } catch {
+      alert("Erro ao salvar.");
     }
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h2 className="text-2xl font-bold mb-4 text-green-800">Novo Cliente</h2>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          { name: "razao_social", label: "Razão Social" },
-          { name: "nome_fantasia", label: "Nome Fantasia" },
-          { name: "cnpj", label: "CNPJ" },
-          { name: "inscricao_estadual", label: "Inscrição Estadual" },
-          { name: "email", label: "Email" },
-          { name: "telefone", label: "Telefone" },
-          { name: "rua", label: "Rua" },
-          { name: "numero", label: "Número" },
-          { name: "bairro", label: "Bairro" },
-          { name: "cidade", label: "Cidade" },
-          { name: "estado", label: "Estado" },
-          { name: "cep", label: "CEP" },
-        ].map((field) => (
-          <div key={field.name}>
-            <label className="block text-sm font-medium mb-1" htmlFor={field.name}>
-              {field.label}
-            </label>
-            <input
-              type="text"
-              name={field.name}
-              value={(formData as any)[field.name]}
-              onChange={handleChange}
-              className="w-full border px-3 py-2 rounded"
-              required={field.name === "razao_social" || field.name === "cnpj" || field.name === "rua"}
-            />
+    <div>
+      <h2 className="text-2xl font-bold mb-4">Novo Cliente</h2>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {Object.keys(formData).map((campo) => (
+          <div key={campo}>
+            <label className="block text-sm font-medium capitalize">{campo.replace("_", " ")}</label>
+            {campo === "observacoes" ? (
+              <textarea
+                name={campo}
+                className="w-full border px-3 py-2 rounded"
+                value={formData[campo as keyof Cliente] || ""}
+                onChange={handleChange}
+              />
+            ) : (
+              <input
+                name={campo}
+                type="text"
+                className="w-full border px-3 py-2 rounded"
+                value={formData[campo as keyof Cliente] || ""}
+                onChange={handleChange}
+              />
+            )}
           </div>
         ))}
-
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-1" htmlFor="observacoes">
-            Observações
-          </label>
-          <textarea
-            name="observacoes"
-            value={formData.observacoes}
-            onChange={handleChange}
-            className="w-full border px-3 py-2 rounded"
-            rows={4}
-          />
-        </div>
-
-        <div className="md:col-span-2 flex justify-end mt-4">
-          <button type="submit" className="bg-green-700 text-white px-6 py-2 rounded hover:bg-green-800">
-            Salvar Cliente
-          </button>
-        </div>
+        <button type="submit" className="bg-green-700 text-white px-4 py-2 rounded hover:bg-green-600">
+          Salvar
+        </button>
       </form>
     </div>
   );
