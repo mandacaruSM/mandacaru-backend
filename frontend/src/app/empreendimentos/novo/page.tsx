@@ -17,12 +17,17 @@ export default function NovoEmpreendimento() {
     descricao: "",
     distancia_km: "",
   });
+
   const router = useRouter();
 
   useEffect(() => {
     fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
       .then((res) => res.json())
-      .then((data) => setClientes(data));
+      .then(setClientes)
+      .catch((err) => {
+        console.error(err);
+        alert("Erro ao carregar clientes.");
+      });
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -31,12 +36,26 @@ export default function NovoEmpreendimento() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
-    router.push("/empreendimentos");
+    try {
+      const payload = {
+        ...formData,
+        cliente: Number(formData.cliente),
+        distancia_km: parseFloat(formData.distancia_km),
+      };
+
+      const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error("Erro ao salvar empreendimento");
+
+      router.push("/empreendimentos");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao salvar empreendimento.");
+    }
   };
 
   return (
@@ -44,21 +63,33 @@ export default function NovoEmpreendimento() {
       <h1 className="text-2xl font-bold text-green-800 mb-4">Novo Empreendimento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <input type="text" name="nome" placeholder="Nome" onChange={handleChange} className="w-full border rounded p-2" required />
-        
+
         <select name="cliente" onChange={handleChange} required className="w-full border rounded p-2">
           <option value="">Selecione um Cliente</option>
           {clientes.map((c) => (
             <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
           ))}
         </select>
-        
+
         <input type="text" name="localizacao" placeholder="Localização" onChange={handleChange} className="w-full border rounded p-2" />
-        
         <textarea name="descricao" placeholder="Descrição" onChange={handleChange} className="w-full border rounded p-2" />
-        
         <input type="number" name="distancia_km" placeholder="Distância (km)" onChange={handleChange} className="w-full border rounded p-2" step="0.01" />
-        
-        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Salvar</button>
+
+        <div className="flex justify-between">
+          <button
+            type="button"
+            onClick={() => router.push("/empreendimentos")}
+            className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          >
+            Salvar
+          </button>
+        </div>
       </form>
     </div>
   );

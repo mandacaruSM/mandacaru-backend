@@ -7,20 +7,28 @@ import Link from "next/link";
 interface Empreendimento {
   id: number;
   nome: string;
-  cliente_nome: string;
-  cidade: string;
-  estado: string;
-  distancia_km: number;
+  cliente_nome?: string; // cliente_nome pode vir undefined
+  cidade?: string;
+  estado?: string;
+  distancia_km?: number;
 }
 
 export default function ListaEmpreendimentosPage() {
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Erro ao buscar empreendimentos.");
+        return res.json();
+      })
       .then(setEmpreendimentos)
-      .catch(() => alert("Erro ao carregar empreendimentos"));
+      .catch((err) => {
+        console.error(err);
+        alert("Erro ao carregar empreendimentos.");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const handleDelete = async (id: number) => {
@@ -30,12 +38,14 @@ export default function ListaEmpreendimentosPage() {
         { method: "DELETE" }
       );
       if (res.ok) {
-        setEmpreendimentos(empreendimentos.filter((e) => e.id !== id));
+        setEmpreendimentos((prev) => prev.filter((e) => e.id !== id));
       } else {
         alert("Erro ao excluir empreendimento.");
       }
     }
   };
+
+  if (loading) return <p className="text-center">Carregando empreendimentos...</p>;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -72,10 +82,10 @@ export default function ListaEmpreendimentosPage() {
           {empreendimentos.map((e) => (
             <tr key={e.id} className="border-b hover:bg-green-50">
               <td className="border p-2">{e.nome}</td>
-              <td className="border p-2">{e.cliente_nome}</td>
-              <td className="border p-2">{e.cidade}</td>
-              <td className="border p-2">{e.estado}</td>
-              <td className="border p-2">{e.distancia_km} km</td>
+              <td className="border p-2">{e.cliente_nome || "—"}</td>
+              <td className="border p-2">{e.cidade || "—"}</td>
+              <td className="border p-2">{e.estado || "—"}</td>
+              <td className="border p-2">{e.distancia_km ?? "—"}</td>
               <td className="border p-2 text-center space-x-2">
                 <Link
                   href={`/empreendimentos/editar/${e.id}`}
