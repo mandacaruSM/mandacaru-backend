@@ -1,8 +1,8 @@
 from django.contrib import admin
-from .models import Lancamento
+from .models import ContaFinanceira
 
-@admin.register(Lancamento)
-class LancamentoAdmin(admin.ModelAdmin):
-    list_display = ('tipo', 'descricao', 'valor', 'data', 'ordem_servico')
-    list_filter = ('tipo', 'data')
+@admin.register(ContaFinanceira)
+class ContaFinanceiraAdmin(admin.ModelAdmin):
+    list_display = ('tipo', 'descricao', 'valor', 'vencimento', 'status')
+    list_filter = ('tipo', 'status', 'vencimento')
     search_fields = ('descricao',)

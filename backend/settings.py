@@ -23,17 +23,16 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
 
-    # Apps locais
-    'backend.apps.core',
-    'backend.apps.clientes',
-    'backend.apps.empreendimentos',
-    'backend.apps.equipamentos',
-    'backend.apps.ordens_servico',
-    'backend.apps.almoxarifado',
-    'backend.apps.manutencao',
-    'backend.apps.financeiro',
-    'backend.apps.relatorios',
-    'backend.apps.orcamentos',
+    'apps.clientes',
+    'apps.fornecedores',
+    'apps.financeiro',
+    'apps.equipamentos',
+    'apps.manutencao',
+    'apps.almoxarifado',
+    'apps.empreendimentos',
+    'apps.ordens_servico',
+    'apps.relatorios',
+    'apps.core',
 ]
 
 MIDDLEWARE = [
@@ -74,6 +73,7 @@ DATABASES = {
 }
 
 AUTH_PASSWORD_VALIDATORS = []
+
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'America/Sao_Paulo'
 USE_I18N = True
@@ -83,11 +83,13 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# This is not recommended for production.
-# You should list the specific origins that are allowed to access your API.
-CORS_ALLOW_ALL_ORIGINS = True
-
+# CORS seguro
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://mandacaru-frontend-ovld.onrender.com",
 ]
+
+# Upload de imagens (comprovantes, fotos de OS, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'

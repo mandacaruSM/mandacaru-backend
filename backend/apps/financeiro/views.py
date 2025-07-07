@@ -1,7 +1,7 @@
 from rest_framework import viewsets
-from .models import OrdemServico
-from .serializers import OrdemServicoSerializer
+from .models import ContaFinanceira
+from .serializers import ContaFinanceiraSerializer
 
-class OrdemServicoViewSet(viewsets.ModelViewSet):
-    queryset = OrdemServico.objects.all().order_by('-data_abertura')
-    serializer_class = OrdemServicoSerializer
+class ContaFinanceiraViewSet(viewsets.ModelViewSet):
+    queryset = ContaFinanceira.objects.all()
+    serializer_class = ContaFinanceiraSerializer
