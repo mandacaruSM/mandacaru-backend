@@ -1,11 +1,11 @@
 from pathlib import Path
 from decouple import config
-import sys
-sys.path.append(str(BASE_DIR / "backend"))
 import os
 import dj_database_url
+import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR / "backend"))
 
 SECRET_KEY = config('SECRET_KEY', default='unsafe-secret-key')
 DEBUG = config('DEBUG', default=False, cast=bool)
