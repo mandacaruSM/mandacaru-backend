@@ -1,6 +1,6 @@
 from django.db import models
-from apps.clientes.models import Cliente
-from apps.empreendimentos.models import Empreendimento
+from backend.apps.clientes.models import Cliente
+from backend.apps.empreendimentos.models import Empreendimento
 
 class Equipamento(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)

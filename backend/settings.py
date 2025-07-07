@@ -5,7 +5,6 @@ import dj_database_url
 import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.append(str(BASE_DIR / "backend"))
 
 SECRET_KEY = config('SECRET_KEY', default='unsafe-secret-key')
 DEBUG = config('DEBUG', default=False, cast=bool)
@@ -23,16 +22,16 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
 
-    'apps.clientes',
-    'apps.fornecedores',
-    'apps.financeiro',
-    'apps.equipamentos',
-    'apps.manutencao',
-    'apps.almoxarifado',
-    'apps.empreendimentos',
-    'apps.ordens_servico',
-    'apps.relatorios',
-    'apps.core',
+    'backend.apps.clientes',
+    'backend.apps.fornecedores',
+    'backend.apps.financeiro',
+    'backend.apps.equipamentos',
+    'backend.apps.manutencao',
+    'backend.apps.almoxarifado',
+    'backend.apps.empreendimentos',
+    'backend.apps.ordens_servico',
+    'backend.apps.relatorios',
+    'backend.apps.core',
 ]
 
 MIDDLEWARE = [

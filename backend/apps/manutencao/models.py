@@ -1,7 +1,7 @@
 from django.db import models
 from decimal import Decimal
 from django.core.exceptions import ValidationError
-from apps.equipamentos.models import Equipamento
+from backend.apps.equipamentos.models import Equipamento
 
 class HistoricoManutencao(models.Model):
     TIPO_MANUTENCAO_CHOICES = [

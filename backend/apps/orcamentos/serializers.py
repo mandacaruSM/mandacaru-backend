@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Orcamento
-from apps.ordens_servico.models import OrdemServico
+from backend.apps.ordens_servico.models import OrdemServico
 
 class OrcamentoSerializer(serializers.ModelSerializer):
     class Meta:

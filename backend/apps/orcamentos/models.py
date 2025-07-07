@@ -1,7 +1,7 @@
 from django.db import models
-from apps.clientes.models import Cliente
-from apps.empreendimentos.models import Empreendimento
-from apps.equipamentos.models import Equipamento
+from backend.apps.clientes.models import Cliente
+from backend.apps.empreendimentos.models import Empreendimento
+from backend.apps.equipamentos.models import Equipamento
 from django.utils import timezone
 
 class Orcamento(models.Model):

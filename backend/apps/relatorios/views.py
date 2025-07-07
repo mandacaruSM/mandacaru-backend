@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from apps.ordens_servico.models import OrdemServico
-from apps.almoxarifado.models import Produto
+from backend.apps.ordens_servico.models import OrdemServico
+from backend.apps.almoxarifado.models import Produto
 from django.db.models import Count, F
 
 class RelatorioOSPorCliente(APIView):

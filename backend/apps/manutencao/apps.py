@@ -2,4 +2,4 @@ from django.apps import AppConfig
 
 class HistoricoManutencaoConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'apps.manutencao'
+    name = 'backend.apps.manutencao'
