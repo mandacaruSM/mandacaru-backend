@@ -12,7 +12,11 @@ export default function NovoEmpreendimento() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [formData, setFormData] = useState({
     nome: "",
-    cliente: 0, // corrigido: começa como número
+    cliente: 0,
+    endereco: "",
+    cidade: "",
+    estado: "",
+    cep: "",
     localizacao: "",
     descricao: "",
     distancia_km: "",
@@ -43,7 +47,7 @@ export default function NovoEmpreendimento() {
         distancia_km: parseFloat(formData.distancia_km),
       };
 
-      console.log("Payload enviado:", payload); // opcional para debug
+      console.log("Payload enviado:", payload);
 
       const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/", {
         method: "POST",
@@ -64,14 +68,7 @@ export default function NovoEmpreendimento() {
     <div className="p-6 max-w-xl mx-auto">
       <h1 className="text-2xl font-bold text-green-800 mb-4">Novo Empreendimento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="text"
-          name="nome"
-          placeholder="Nome"
-          onChange={handleChange}
-          className="w-full border rounded p-2"
-          required
-        />
+        <input type="text" name="nome" placeholder="Nome" onChange={handleChange} className="w-full border rounded p-2" required />
 
         <select
           name="cliente"
@@ -82,33 +79,18 @@ export default function NovoEmpreendimento() {
         >
           <option value={0}>Selecione um Cliente</option>
           {clientes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome_fantasia}
-            </option>
+            <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
           ))}
         </select>
 
-        <input
-          type="text"
-          name="localizacao"
-          placeholder="Localização"
-          onChange={handleChange}
-          className="w-full border rounded p-2"
-        />
-        <textarea
-          name="descricao"
-          placeholder="Descrição"
-          onChange={handleChange}
-          className="w-full border rounded p-2"
-        />
-        <input
-          type="number"
-          name="distancia_km"
-          placeholder="Distância (km)"
-          onChange={handleChange}
-          className="w-full border rounded p-2"
-          step="0.01"
-        />
+        <input type="text" name="endereco" placeholder="Endereço" onChange={handleChange} className="w-full border rounded p-2" required />
+        <input type="text" name="cidade" placeholder="Cidade" onChange={handleChange} className="w-full border rounded p-2" required />
+        <input type="text" name="estado" placeholder="Estado (ex: MG)" maxLength={2} onChange={handleChange} className="w-full border rounded p-2" required />
+        <input type="text" name="cep" placeholder="CEP" onChange={handleChange} className="w-full border rounded p-2" required />
+
+        <input type="text" name="localizacao" placeholder="Localização" onChange={handleChange} className="w-full border rounded p-2" />
+        <textarea name="descricao" placeholder="Descrição" onChange={handleChange} className="w-full border rounded p-2" />
+        <input type="number" name="distancia_km" placeholder="Distância (km)" onChange={handleChange} className="w-full border rounded p-2" step="0.01" required />
 
         <div className="flex justify-between">
           <button

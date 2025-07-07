@@ -16,6 +16,10 @@ export default function EditarEmpreendimento() {
   const [formData, setFormData] = useState<null | {
     nome: string;
     cliente: string | number;
+    endereco: string;
+    cidade: string;
+    estado: string;
+    cep: string;
     localizacao: string;
     descricao: string;
     distancia_km: string;
@@ -23,16 +27,21 @@ export default function EditarEmpreendimento() {
 
   useEffect(() => {
     if (typeof id === "string") {
+      // Carrega dados do empreendimento
       fetch(`https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/${id}/`)
         .then((res) => res.json())
         .then((data) => {
-          // Corrige campo cliente numérico para string (opcional)
-          setFormData({ ...data, cliente: String(data.cliente) });
+          setFormData({
+            ...data,
+            cliente: String(data.cliente), // garante compatibilidade com o <select>
+            distancia_km: String(data.distancia_km),
+          });
         });
 
+      // Carrega lista de clientes
       fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
         .then((res) => res.json())
-        .then((data) => setClientes(data));
+        .then(setClientes);
     }
   }, [id]);
 
@@ -46,13 +55,23 @@ export default function EditarEmpreendimento() {
     e.preventDefault();
     if (!formData || typeof id !== "string") return;
 
-    await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/${id}/`, {
+    const payload = {
+      ...formData,
+      cliente: Number(formData.cliente),
+      distancia_km: parseFloat(formData.distancia_km),
+    };
+
+    const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/${id}/`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
+      body: JSON.stringify(payload),
     });
 
-    router.push("/empreendimentos");
+    if (res.ok) {
+      router.push("/empreendimentos");
+    } else {
+      alert("Erro ao salvar alterações.");
+    }
   };
 
   if (!formData) return <div className="p-4">Carregando...</div>;
@@ -73,6 +92,7 @@ export default function EditarEmpreendimento() {
           onChange={handleChange}
           className="w-full border rounded p-2"
           placeholder="Nome do Empreendimento"
+          required
         />
 
         <select
@@ -80,12 +100,56 @@ export default function EditarEmpreendimento() {
           value={formData.cliente}
           onChange={handleChange}
           className="w-full border rounded p-2"
+          required
         >
           <option value="">Selecione um Cliente</option>
           {clientes.map((c) => (
-            <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
+            <option key={c.id} value={c.id}>
+              {c.nome_fantasia}
+            </option>
           ))}
         </select>
+
+        <input
+          type="text"
+          name="endereco"
+          value={formData.endereco}
+          onChange={handleChange}
+          className="w-full border rounded p-2"
+          placeholder="Endereço"
+          required
+        />
+
+        <input
+          type="text"
+          name="cidade"
+          value={formData.cidade}
+          onChange={handleChange}
+          className="w-full border rounded p-2"
+          placeholder="Cidade"
+          required
+        />
+
+        <input
+          type="text"
+          name="estado"
+          value={formData.estado}
+          onChange={handleChange}
+          className="w-full border rounded p-2"
+          maxLength={2}
+          placeholder="UF (ex: MG)"
+          required
+        />
+
+        <input
+          type="text"
+          name="cep"
+          value={formData.cep}
+          onChange={handleChange}
+          className="w-full border rounded p-2"
+          placeholder="CEP"
+          required
+        />
 
         <input
           type="text"
@@ -110,8 +174,9 @@ export default function EditarEmpreendimento() {
           value={formData.distancia_km}
           onChange={handleChange}
           className="w-full border rounded p-2"
-          step="0.01"
           placeholder="Distância (KM)"
+          step="0.01"
+          required
         />
 
         <button
