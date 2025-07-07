@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import {
   BarChart,
@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useDebounce } from "use-debounce"; // npm install use-debounce
 
 interface Conta {
   id: number;
@@ -24,31 +25,48 @@ interface Conta {
 
 export default function RelatorioFinanceiroPage() {
   const [contas, setContas] = useState<Conta[]>([]);
-  const [mes, setMes] = useState<string>(new Date().getMonth() + 1 + "");
-  const [ano, setAno] = useState<string>(new Date().getFullYear() + "");
+  const [mes, setMes] = useState<string>((new Date().getMonth() + 1).toString());
+  const [ano, setAno] = useState<string>(new Date().getFullYear().toString());
   const [clienteFiltro, setClienteFiltro] = useState("");
   const [fornecedorFiltro, setFornecedorFiltro] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [debouncedClienteFiltro] = useDebounce(clienteFiltro, 300);
+  const [debouncedFornecedorFiltro] = useDebounce(fornecedorFiltro, 300);
 
   useEffect(() => {
+    setIsLoading(true);
     axios
       .get<Conta[]>("https://mandacaru-backend-i2ci.onrender.com/api/financeiro/contas/")
-      .then((res) => setContas(res.data))
-      .catch((err) => console.error("Erro ao carregar contas:", err));
+      .then((res) => {
+        setContas(res.data);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Erro ao carregar contas:", err);
+        setError("Falha ao carregar os dados. Tente novamente.");
+        setIsLoading(false);
+      });
   }, []);
 
-  const contasFiltradas = contas.filter((conta) => {
-    const data = new Date(conta.data_vencimento);
-    const mesAnoOK =
-      data.getMonth() + 1 === parseInt(mes) &&
-      data.getFullYear() === parseInt(ano);
-    const clienteOK =
-      !clienteFiltro ||
-      conta.cliente_nome?.toLowerCase().includes(clienteFiltro.toLowerCase());
-    const fornecedorOK =
-      !fornecedorFiltro ||
-      conta.fornecedor_nome?.toLowerCase().includes(fornecedorFiltro.toLowerCase());
-    return mesAnoOK && clienteOK && fornecedorOK;
-  });
+  const contasFiltradas = useMemo(() => {
+    return contas.filter((conta) => {
+      const data = new Date(conta.data_vencimento);
+      const mesAnoOK =
+        data.getMonth() + 1 === parseInt(mes) &&
+        data.getFullYear() === parseInt(ano);
+      const clienteOK =
+        !debouncedClienteFiltro ||
+        (conta.cliente_nome &&
+          conta.cliente_nome.toLowerCase().includes(debouncedClienteFiltro.toLowerCase()));
+      const fornecedorOK =
+        !debouncedFornecedorFiltro ||
+        (conta.fornecedor_nome &&
+          conta.fornecedor_nome.toLowerCase().includes(debouncedFornecedorFiltro.toLowerCase()));
+      return mesAnoOK && clienteOK && fornecedorOK;
+    });
+  }, [contas, mes, ano, debouncedClienteFiltro, debouncedFornecedorFiltro]);
 
   const total = (filtro: Partial<Conta>) =>
     contasFiltradas
@@ -63,11 +81,13 @@ export default function RelatorioFinanceiroPage() {
       currency: "BRL",
     }).format(valor);
 
+  const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+
   const exportarParaExcel = () => {
     const csv = [
       ["Descrição", "Valor", "Data", "Tipo", "Status"],
       ...contasFiltradas.map((c) => [
-        c.descricao,
+        escapeCsv(c.descricao),
         c.valor,
         c.data_vencimento,
         c.tipo,
@@ -87,34 +107,36 @@ export default function RelatorioFinanceiroPage() {
     document.body.removeChild(link);
   };
 
-  const dadosGrafico = [
-    { nome: "Pagar", valor: total({ tipo: "pagar" }) },
-    { nome: "Receber", valor: total({ tipo: "receber" }) },
-    { nome: "Pagos", valor: total({ status: "pago" }) },
-    { nome: "Pendentes", valor: total({ status: "pendente" }) },
-  ];
+  const dadosGrafico = useMemo(
+    () => [
+      { nome: "Pagar", valor: total({ tipo: "pagar" }) },
+      { nome: "Receber", valor: total({ tipo: "receber" }) },
+      { nome: "Pagos", valor: total({ status: "pago" }) },
+      { nome: "Pendentes", valor: total({ status: "pendente" }) },
+    ],
+    [contasFiltradas]
+  );
+
+  if (isLoading) return <div className="p-6">Carregando...</div>;
+  if (error) return <div className="p-6 text-red-600">{error}</div>;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold text-green-800 mb-4">Relatório Financeiro</h1>
 
       <div className="flex flex-wrap gap-4 mb-6">
-        <select
-          value={mes}
-          onChange={(e) => setMes(e.target.value)}
-          className="border p-2 rounded"
-        >
+        <select value={mes} onChange={(e) => setMes(e.target.value)} className="border p-2 rounded">
           {Array.from({ length: 12 }, (_, i) => (
-            <option key={i + 1} value={i + 1}>{i + 1}</option>
+            <option key={i + 1} value={i + 1}>
+              {i + 1}
+            </option>
           ))}
         </select>
-        <select
-          value={ano}
-          onChange={(e) => setAno(e.target.value)}
-          className="border p-2 rounded"
-        >
+        <select value={ano} onChange={(e) => setAno(e.target.value)} className="border p-2 rounded">
           {["2024", "2025", "2026"].map((y) => (
-            <option key={y} value={y}>{y}</option>
+            <option key={y} value={y}>
+              {y}
+            </option>
           ))}
         </select>
         <input
@@ -150,16 +172,16 @@ export default function RelatorioFinanceiroPage() {
         </div>
       </div>
 
+      {/* Corrigido aqui ↓ */}
       <div className="bg-white p-4 mb-6 rounded shadow">
         <h2 className="text-lg font-semibold mb-2">Resumo em Gráfico</h2>
         <ResponsiveContainer width="100%" height={250}>
-            {/* Removemos width/height daqui */}
-            <BarChart data={dadosGrafico}>
-                <XAxis dataKey="nome" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="valor" fill="#22c55e" />
-            </BarChart>
+          <BarChart data={dadosGrafico}>
+            <XAxis dataKey="nome" />
+            <YAxis />
+            <Tooltip formatter={(value: number) => formatar(value)} />
+            <Bar dataKey="valor" fill="#22c55e" />
+          </BarChart>
         </ResponsiveContainer>
       </div>
 
