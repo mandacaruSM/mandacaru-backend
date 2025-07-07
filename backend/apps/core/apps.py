@@ -1,3 +1,3 @@
 from django.apps import AppConfig
 class CoreConfig(AppConfig):
-    name = 'apps.core'
+    name = 'backend.apps.core'
