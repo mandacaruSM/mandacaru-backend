@@ -24,16 +24,16 @@ INSTALLED_APPS = [
     'corsheaders',
 
     # Apps locais
-    'apps.core',
-    'apps.clientes',
-    'apps.empreendimentos',
-    'apps.equipamentos',
-    'apps.ordens_servico',
-    'apps.almoxarifado',
-    'apps.manutencao',
-    'apps.financeiro',
-    'apps.relatorios',
-    'apps.orcamentos',
+    'backend.apps.core',
+    'backend.apps.clientes',
+    'backend.apps.empreendimentos',
+    'backend.apps.equipamentos',
+    'backend.apps.ordens_servico',
+    'backend.apps.almoxarifado',
+    'backend.apps.manutencao',
+    'backend.apps.financeiro',
+    'backend.apps.relatorios',
+    'backend.apps.orcamentos',
 ]
 
 MIDDLEWARE = [
