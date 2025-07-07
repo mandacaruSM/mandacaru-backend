@@ -1,8 +1,7 @@
-// /src/app/equipamentos/novo/page.tsx
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 interface Cliente {
   id: number;
@@ -12,7 +11,6 @@ interface Cliente {
 interface Empreendimento {
   id: number;
   nome: string;
-  cliente: number;
 }
 
 export default function NovoEquipamentoPage() {
@@ -23,64 +21,61 @@ export default function NovoEquipamentoPage() {
     nome: "",
     cliente: "",
     empreendimento: "",
+    marca: "",
     modelo: "",
     numero_serie: "",
+    tipo: "",
+    horimetro_atual: "",
+    descricao: "",
   });
 
   useEffect(() => {
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
+    fetch("/api/clientes/")
       .then((res) => res.json())
-      .then((data: Cliente[]) => setClientes(data));
+      .then((data) => setClientes(data));
+
+    fetch("/api/empreendimentos/")
+      .then((res) => res.json())
+      .then((data) => setEmpreendimentos(data));
   }, []);
 
-  useEffect(() => {
-    if (formData.cliente) {
-      fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/")
-        .then((res) => res.json())
-        .then((data: Empreendimento[]) => {
-          const filtrados = data.filter((e) => e.cliente === parseInt(formData.cliente));
-          setEmpreendimentos(filtrados);
-        });
-    } else {
-      setEmpreendimentos([]);
-    }
-  }, [formData.cliente]);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch("https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/", {
+    const response = await fetch("/api/equipamentos/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
-    router.push("/equipamentos");
+
+    if (response.ok) {
+      router.push("/equipamentos");
+    } else {
+      alert("Erro ao cadastrar equipamento");
+    }
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold text-green-800 mb-4">Novo Equipamento</h1>
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4 text-green-700">Novo Equipamento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
           type="text"
           name="nome"
-          placeholder="Nome do equipamento"
+          placeholder="Nome"
           value={formData.nome}
           onChange={handleChange}
-          className="w-full border rounded p-2"
-          required
+          className="w-full border p-2 rounded"
         />
 
         <select
           name="cliente"
           value={formData.cliente}
           onChange={handleChange}
-          className="w-full border rounded p-2"
+          className="w-full border p-2 rounded"
           required
         >
           <option value="">Selecione o cliente</option>
@@ -95,8 +90,7 @@ export default function NovoEquipamentoPage() {
           name="empreendimento"
           value={formData.empreendimento}
           onChange={handleChange}
-          className="w-full border rounded p-2"
-          required
+          className="w-full border p-2 rounded"
         >
           <option value="">Selecione o empreendimento</option>
           {empreendimentos.map((emp) => (
@@ -108,35 +102,71 @@ export default function NovoEquipamentoPage() {
 
         <input
           type="text"
+          name="marca"
+          placeholder="Marca"
+          value={formData.marca}
+          onChange={handleChange}
+          className="w-full border p-2 rounded"
+        />
+
+        <input
+          type="text"
           name="modelo"
           placeholder="Modelo"
           value={formData.modelo}
           onChange={handleChange}
-          className="w-full border rounded p-2"
+          className="w-full border p-2 rounded"
         />
 
         <input
           type="text"
           name="numero_serie"
-          placeholder="Número de série"
+          placeholder="Número de Série"
           value={formData.numero_serie}
           onChange={handleChange}
-          className="w-full border rounded p-2"
+          className="w-full border p-2 rounded"
         />
 
-        <div className="flex justify-between">
+        <input
+          type="text"
+          name="tipo"
+          placeholder="Tipo de Equipamento"
+          value={formData.tipo}
+          onChange={handleChange}
+          className="w-full border p-2 rounded"
+        />
+
+        <input
+          type="number"
+          name="horimetro_atual"
+          placeholder="Horímetro Atual"
+          value={formData.horimetro_atual}
+          onChange={handleChange}
+          step="0.1"
+          className="w-full border p-2 rounded"
+        />
+
+        <textarea
+          name="descricao"
+          placeholder="Descrição"
+          value={formData.descricao}
+          onChange={handleChange}
+          className="w-full border p-2 rounded"
+        />
+
+        <div className="flex gap-4 mt-4">
+          <button
+            type="submit"
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          >
+            Cadastrar
+          </button>
           <button
             type="button"
             onClick={() => router.push("/equipamentos")}
             className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500"
           >
-            Voltar
-          </button>
-          <button
-            type="submit"
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            Salvar
+            Cancelar
           </button>
         </div>
       </form>

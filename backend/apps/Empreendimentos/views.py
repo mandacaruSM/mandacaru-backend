@@ -1,4 +1,3 @@
-# apps/empreendimentos/views.py
 from rest_framework import viewsets
 from .models import Empreendimento
 from .serializers import EmpreendimentoSerializer

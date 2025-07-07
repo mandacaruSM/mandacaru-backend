@@ -17,18 +17,21 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
+
     'rest_framework',
     'corsheaders',
-    'apps.core',
-    'apps.clientes',
-    'apps.empreendimentos',
-    'apps.equipamentos',
-    'apps.ordens_servico',
-    'apps.almoxarifado',
-    'apps.manutencao',
-    'apps.financeiro',
-    'apps.relatorios',
-    'apps.orcamentos',
+
+    # Apps locais (corrigidos com caminho relativo ao backend)
+    'backend.apps.core',
+    'backend.apps.clientes',
+    'backend.apps.empreendimentos',
+    'backend.apps.equipamentos',
+    'backend.apps.ordens_servico',
+    'backend.apps.almoxarifado',
+    'backend.apps.manutencao',
+    'backend.apps.financeiro',
+    'backend.apps.relatorios',
+    'backend.apps.orcamentos',
 ]
 
 MIDDLEWARE = [

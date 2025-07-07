@@ -22,12 +22,13 @@ export default function EditarEquipamento() {
   const [formData, setFormData] = useState<null | {
     nome: string;
     tipo: string;
-    fabricante: string;
+    marca: string;
     modelo: string;
     numero_serie: string;
+    horimetro_atual: string;
     cliente: string;
     empreendimento: string;
-    observacoes: string;
+    descricao: string;
   }>(null);
 
   useEffect(() => {
@@ -37,9 +38,15 @@ export default function EditarEquipamento() {
       .then((res) => res.json())
       .then((data) => {
         setFormData({
-          ...data,
-          cliente: String(data.cliente),
-          empreendimento: String(data.empreendimento),
+          nome: data.nome || "",
+          tipo: data.tipo || "",
+          marca: data.marca || "",
+          modelo: data.modelo || "",
+          numero_serie: data.numero_serie || "",
+          horimetro_atual: String(data.horimetro_atual || ""),
+          cliente: String(data.cliente || ""),
+          empreendimento: String(data.empreendimento || ""),
+          descricao: data.descricao || "",
         });
       });
 
@@ -61,13 +68,17 @@ export default function EditarEquipamento() {
     e.preventDefault();
     if (!formData || typeof id !== "string") return;
 
-    await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/${id}/`, {
+    const response = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/${id}/`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
 
-    router.push("/equipamentos");
+    if (response.ok) {
+      router.push("/equipamentos");
+    } else {
+      alert("Erro ao salvar alterações");
+    }
   };
 
   if (!formData) return <div className="p-4">Carregando...</div>;
@@ -83,9 +94,10 @@ export default function EditarEquipamento() {
       <form onSubmit={handleSubmit} className="grid gap-4">
         <input name="nome" value={formData.nome} onChange={handleChange} className="border rounded p-2" placeholder="Nome" />
         <input name="tipo" value={formData.tipo} onChange={handleChange} className="border rounded p-2" placeholder="Tipo" />
-        <input name="fabricante" value={formData.fabricante} onChange={handleChange} className="border rounded p-2" placeholder="Fabricante" />
+        <input name="marca" value={formData.marca} onChange={handleChange} className="border rounded p-2" placeholder="Marca" />
         <input name="modelo" value={formData.modelo} onChange={handleChange} className="border rounded p-2" placeholder="Modelo" />
         <input name="numero_serie" value={formData.numero_serie} onChange={handleChange} className="border rounded p-2" placeholder="Número de Série" />
+        <input name="horimetro_atual" value={formData.horimetro_atual} onChange={handleChange} className="border rounded p-2" placeholder="Horímetro Atual" />
 
         <select name="cliente" value={formData.cliente} onChange={handleChange} className="border rounded p-2">
           <option value="">Selecione um Cliente</option>
@@ -102,11 +114,11 @@ export default function EditarEquipamento() {
         </select>
 
         <textarea
-          name="observacoes"
-          value={formData.observacoes}
+          name="descricao"
+          value={formData.descricao}
           onChange={handleChange}
           className="border rounded p-2"
-          placeholder="Observações"
+          placeholder="Descrição"
         />
 
         <button type="submit" className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600 w-full md:w-auto">
