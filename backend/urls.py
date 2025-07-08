@@ -23,8 +23,6 @@ urlpatterns = [
     path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
     path('api/financeiro/', include('backend.apps.financeiro.urls')),
 
-    # Rotas do DRF (como financeiro)
-    path('api/', include(router.urls)),
 ]
 
 # Suporte a imagens (comprovantes)

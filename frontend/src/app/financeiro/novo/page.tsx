@@ -66,9 +66,17 @@ export default function NovaContaPage() {
     data.append("forma_pagamento", formData.forma_pagamento);
     data.append("tipo", formData.tipo);
     data.append("status", formData.status);
-    if (formData.cliente) data.append("cliente", formData.cliente);
-    if (formData.fornecedor) data.append("fornecedor", formData.fornecedor);
-    if (formData.comprovante) data.append("comprovante", formData.comprovante);
+
+    if (formData.tipo === "receber" && formData.cliente) {
+      data.append("cliente", formData.cliente);
+    }
+    if (formData.tipo === "pagar" && formData.fornecedor) {
+      data.append("fornecedor", formData.fornecedor);
+    }
+
+    if (formData.comprovante) {
+      data.append("comprovante", formData.comprovante);
+    }
 
     try {
       await axios.post("https://mandacaru-backend-i2ci.onrender.com/api/financeiro/contas/", data);
@@ -87,34 +95,38 @@ export default function NovaContaPage() {
         <input name="valor" placeholder="Valor" type="number" onChange={handleChange} required className="w-full p-2 border rounded" />
         <input name="data_vencimento" type="date" onChange={handleChange} required className="w-full p-2 border rounded" />
         <input name="forma_pagamento" placeholder="Forma de Pagamento" onChange={handleChange} className="w-full p-2 border rounded" />
-        <select name="tipo" onChange={handleChange} className="w-full p-2 border rounded">
+        <select name="tipo" value={formData.tipo} onChange={handleChange} className="w-full p-2 border rounded">
           <option value="pagar">Pagar</option>
           <option value="receber">Receber</option>
         </select>
-        <select name="status" onChange={handleChange} className="w-full p-2 border rounded">
+        <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded">
           <option value="pendente">Pendente</option>
           <option value="pago">Pago</option>
         </select>
-        <select name="cliente" onChange={handleChange} className="w-full p-2 border rounded">
-          <option value="">Selecione o Cliente (opcional)</option>
-          {clientes.map((c) => (
-            <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
-          ))}
-        </select>
-        <select name="fornecedor" onChange={handleChange} className="w-full p-2 border rounded">
-          <option value="">Selecione o Fornecedor (opcional)</option>
-          {fornecedores.map((f) => (
-            <option key={f.id} value={f.id}>{f.nome_fantasia}</option>
-          ))}
-        </select>
+
+        {formData.tipo === "receber" && (
+          <select name="cliente" value={formData.cliente} onChange={handleChange} className="w-full p-2 border rounded">
+            <option value="">Selecione o Cliente</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
+            ))}
+          </select>
+        )}
+
+        {formData.tipo === "pagar" && (
+          <select name="fornecedor" value={formData.fornecedor} onChange={handleChange} className="w-full p-2 border rounded">
+            <option value="">Selecione o Fornecedor</option>
+            {fornecedores.map((f) => (
+              <option key={f.id} value={f.id}>{f.nome_fantasia}</option>
+            ))}
+          </select>
+        )}
+
         <input type="file" accept="image/*,application/pdf" onChange={handleFileChange} className="w-full p-2 border rounded" />
+
         <div className="flex gap-4">
-          <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-            Salvar
-          </button>
-          <button type="button" onClick={() => router.push("/financeiro")} className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">
-            Cancelar
-          </button>
+          <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Salvar</button>
+          <button type="button" onClick={() => router.push("/financeiro")} className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">Cancelar</button>
         </div>
       </form>
     </div>
