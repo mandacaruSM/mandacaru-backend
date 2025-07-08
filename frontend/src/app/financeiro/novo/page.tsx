@@ -21,7 +21,7 @@ export default function NovaContaPage() {
   const [formData, setFormData] = useState({
     descricao: "",
     valor: "",
-    data_vencimento: "",
+    vencimento: "",
     forma_pagamento: "",
     tipo: "pagar",
     status: "pendente",
@@ -62,7 +62,7 @@ export default function NovaContaPage() {
     const data = new FormData();
     data.append("descricao", formData.descricao);
     data.append("valor", valorFloat.toString());
-    data.append("data_vencimento", formData.data_vencimento);
+    data.append("vencimento", formData.vencimento);
     data.append("forma_pagamento", formData.forma_pagamento);
     data.append("tipo", formData.tipo);
     data.append("status", formData.status);
@@ -93,7 +93,7 @@ export default function NovaContaPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <input name="descricao" placeholder="Descrição" onChange={handleChange} required className="w-full p-2 border rounded" />
         <input name="valor" placeholder="Valor" type="number" onChange={handleChange} required className="w-full p-2 border rounded" />
-        <input name="data_vencimento" type="date" onChange={handleChange} required className="w-full p-2 border rounded" />
+        <input name="vencimento" type="date" onChange={handleChange} required className="w-full p-2 border rounded" />
         <input name="forma_pagamento" placeholder="Forma de Pagamento" onChange={handleChange} className="w-full p-2 border rounded" />
         <select name="tipo" value={formData.tipo} onChange={handleChange} className="w-full p-2 border rounded">
           <option value="pagar">Pagar</option>

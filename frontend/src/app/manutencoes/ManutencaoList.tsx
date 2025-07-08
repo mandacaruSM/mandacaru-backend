@@ -5,7 +5,7 @@ import Link from "next/link";
 
 interface Manutencao {
   id: number;
-  equipamento: string;
+  equipamento_nome: string;
   tipo: string;
   data: string;
   horimetro: string;
@@ -69,7 +69,7 @@ export default function ManutencaoList({ recarregar }: ManutencaoListProps) {
           {manutencoes.map((manutencao) => (
             <tr key={manutencao.id}>
               <td className="border px-2 py-1">{manutencao.id}</td>
-              <td className="border px-2 py-1">{manutencao.equipamento}</td>
+              <td className="border px-2 py-1">{manutencao.equipamento_nome}</td>
               <td className="border px-2 py-1">{manutencao.tipo}</td>
               <td className="border px-2 py-1">{manutencao.data}</td>
               <td className="border px-2 py-1">{manutencao.horimetro}</td>

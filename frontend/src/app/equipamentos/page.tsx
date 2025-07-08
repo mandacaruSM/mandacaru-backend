@@ -11,6 +11,10 @@ interface Equipamento {
   empreendimento_nome: string;
   modelo: string;
   numero_serie: string;
+  descricao: string;
+  tipo: string;
+  marca: string;
+  horimetro: string;
 }
 
 export default function ListaEquipamentos() {
@@ -64,6 +68,10 @@ export default function ListaEquipamentos() {
             <th className="border p-2 text-left">Empreendimento</th>
             <th className="border p-2 text-left">Modelo</th>
             <th className="border p-2 text-left">Nº Série</th>
+            <th className="border p-2 text-left">Descrição</th>
+            <th className="border p-2 text-left">Tipo</th>
+            <th className="border p-2 text-left">Marca</th>
+            <th className="border p-2 text-left">Horímetro</th>
             <th className="border p-2 text-center">Ações</th>
           </tr>
         </thead>
@@ -75,6 +83,10 @@ export default function ListaEquipamentos() {
               <td className="border p-2">{e.empreendimento_nome}</td>
               <td className="border p-2">{e.modelo}</td>
               <td className="border p-2">{e.numero_serie}</td>
+              <td className="border p-2">{e.descricao}</td>
+              <td className="border p-2">{e.tipo}</td>
+              <td className="border p-2">{e.marca}</td>
+              <td className="border p-2">{e.horimetro}</td>
               <td className="border p-2 text-center space-x-2">
                 <Link
                   href={`/equipamentos/editar/${e.id}`}

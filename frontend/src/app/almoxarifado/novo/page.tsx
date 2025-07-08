@@ -7,11 +7,10 @@ import Link from "next/link";
 export default function NovoProdutoPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
-    nome: "",
+    codigo: "",
     descricao: "",
-    quantidade: "",
-    unidade: "",
-    localizacao: "",
+    unidade_medida: "",
+    estoque_atual: "",
   });
 
   const handleChange = (
@@ -59,10 +58,10 @@ export default function NovoProdutoPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
-          name="nome"
-          value={formData.nome}
+          name="codigo"
+          value={formData.codigo}
           onChange={handleChange}
-          placeholder="Nome"
+          placeholder="Código"
           className="border p-2 w-full"
           required
         />
@@ -75,27 +74,20 @@ export default function NovoProdutoPage() {
         />
         <input
           type="number"
-          name="quantidade"
-          value={formData.quantidade}
+          name="estoque_atual"
+          value={formData.estoque_atual}
           onChange={handleChange}
-          placeholder="Quantidade"
+          placeholder="Estoque Atual"
           className="border p-2 w-full"
           required
         />
         <input
-          name="unidade"
-          value={formData.unidade}
+          name="unidade_medida"
+          value={formData.unidade_medida}
           onChange={handleChange}
-          placeholder="Unidade (ex: un, kg, l)"
+          placeholder="Unidade de Medida (ex: un, kg, l)"
           className="border p-2 w-full"
           required
-        />
-        <input
-          name="localizacao"
-          value={formData.localizacao}
-          onChange={handleChange}
-          placeholder="Localização no estoque"
-          className="border p-2 w-full"
         />
 
         <button

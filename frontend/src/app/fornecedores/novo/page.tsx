@@ -28,9 +28,13 @@ export default function NovoFornecedorPage() {
     try {
       await axios.post("https://mandacaru-backend-i2ci.onrender.com/api/fornecedores/", formData);
       router.push("/fornecedores");
-    } catch (error) {
-      console.error("Erro ao cadastrar fornecedor:", error);
-      alert("Erro ao cadastrar fornecedor. Verifique os dados.");
+    } catch (error: any) {
+      if (error.response && error.response.data && error.response.data.cnpj) {
+        alert(`Erro: ${error.response.data.cnpj[0]}`);
+      } else {
+        console.error("Erro ao cadastrar fornecedor:", error);
+        alert("Erro ao cadastrar fornecedor. Verifique os dados.");
+      }
     }
   };
 

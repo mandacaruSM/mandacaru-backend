@@ -14,39 +14,39 @@ interface Empreendimento {
   nome: string;
 }
 
-export default function EditarEquipamento() {
+interface Equipamento {
+  id: number;
+  nome: string;
+}
+
+export default function EditarOrcamentoPage() {
   const { id } = useParams();
   const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
+  const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
   const [formData, setFormData] = useState<null | {
-    nome: string;
-    tipo: string;
-    marca: string;
-    modelo: string;
-    n_serie: string;
-    horimetro: string;
     cliente: string;
     empreendimento: string;
+    equipamento: string;
     descricao: string;
+    valor: string;
+    status: string;
   }>(null);
 
   useEffect(() => {
     if (typeof id !== "string") return;
 
-    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/${id}/`)
+    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/orcamentos/${id}/`)
       .then((res) => res.json())
       .then((data) => {
         setFormData({
-          nome: data.nome || "",
-          tipo: data.tipo || "",
-          marca: data.marca || "",
-          modelo: data.modelo || "",
-          n_serie: data.n_serie || "",
-          horimetro: String(data.horimetro || ""),
           cliente: String(data.cliente || ""),
           empreendimento: String(data.empreendimento || ""),
+          equipamento: String(data.equipamento || ""),
           descricao: data.descricao || "",
+          valor: String(data.valor || ""),
+          status: data.status || "pendente",
         });
       });
 
@@ -57,9 +57,15 @@ export default function EditarEquipamento() {
     fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/")
       .then((res) => res.json())
       .then(setEmpreendimentos);
+
+    fetch("https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/")
+      .then((res) => res.json())
+      .then(setEquipamentos);
   }, [id]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     if (!formData) return;
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -68,14 +74,14 @@ export default function EditarEquipamento() {
     e.preventDefault();
     if (!formData || typeof id !== "string") return;
 
-    const response = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/${id}/`, {
+    const response = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/orcamentos/${id}/`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
 
     if (response.ok) {
-      router.push("/equipamentos");
+      router.push("/orcamentos");
     } else {
       alert("Erro ao salvar alterações");
     }
@@ -86,19 +92,12 @@ export default function EditarEquipamento() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-green-800">Editar Equipamento</h2>
+        <h2 className="text-xl font-bold text-green-800">Editar Orçamento</h2>
         <Link href="/" className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400">
           🏠 Home
         </Link>
       </div>
       <form onSubmit={handleSubmit} className="grid gap-4">
-        <input name="nome" value={formData.nome} onChange={handleChange} className="border rounded p-2" placeholder="Nome" />
-        <input name="tipo" value={formData.tipo} onChange={handleChange} className="border rounded p-2" placeholder="Tipo" />
-        <input name="marca" value={formData.marca} onChange={handleChange} className="border rounded p-2" placeholder="Marca" />
-        <input name="modelo" value={formData.modelo} onChange={handleChange} className="border rounded p-2" placeholder="Modelo" />
-        <input name="n_serie" value={formData.n_serie} onChange={handleChange} className="border rounded p-2" placeholder="Número de Série" />
-        <input name="horimetro" value={formData.horimetro} onChange={handleChange} className="border rounded p-2" placeholder="Horímetro" />
-
         <select name="cliente" value={formData.cliente} onChange={handleChange} className="border rounded p-2">
           <option value="">Selecione um Cliente</option>
           {clientes.map((c) => (
@@ -113,6 +112,13 @@ export default function EditarEquipamento() {
           ))}
         </select>
 
+        <select name="equipamento" value={formData.equipamento} onChange={handleChange} className="border rounded p-2">
+          <option value="">Selecione um Equipamento</option>
+          {equipamentos.map((e) => (
+            <option key={e.id} value={e.id}>{e.nome}</option>
+          ))}
+        </select>
+
         <textarea
           name="descricao"
           value={formData.descricao}
@@ -120,6 +126,22 @@ export default function EditarEquipamento() {
           className="border rounded p-2"
           placeholder="Descrição"
         />
+
+        <input
+          type="number"
+          step="0.01"
+          name="valor"
+          value={formData.valor}
+          onChange={handleChange}
+          className="border rounded p-2"
+          placeholder="Valor"
+        />
+
+        <select name="status" value={formData.status} onChange={handleChange} className="border rounded p-2">
+          <option value="pendente">Pendente</option>
+          <option value="aprovado">Aprovado</option>
+          <option value="rejeitado">Rejeitado</option>
+        </select>
 
         <button type="submit" className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600 w-full md:w-auto">
           Salvar Alterações

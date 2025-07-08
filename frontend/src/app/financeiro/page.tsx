@@ -7,7 +7,7 @@ interface Conta {
   id: number;
   descricao: string;
   valor: number;
-  data_vencimento: string;
+  vencimento: string;
   forma_pagamento: string;
   tipo: string;
   status: string;
@@ -78,7 +78,7 @@ export default function FinanceiroPage() {
               <tr key={conta.id} className="border-b">
                 <td className="p-2">{conta.descricao}</td>
                 <td className="p-2">{formatarValor(conta.valor)}</td>
-                <td className="p-2">{conta.data_vencimento}</td>
+                <td className="p-2">{conta.vencimento}</td>
                 <td className="p-2 capitalize">{conta.tipo}</td>
                 <td className="p-2 capitalize">{conta.status}</td>
                 <td className="p-2">{conta.cliente_nome || conta.fornecedor_nome || "-"}</td>
