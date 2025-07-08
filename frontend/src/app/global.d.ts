@@ -1,10 +1,18 @@
-// src/global.d.ts
 declare module "recharts" {
   import * as React from "react";
-  export const BarChart: React.ComponentType<any>;
-  export const Bar: React.ComponentType<any>;
-  export const XAxis: React.ComponentType<any>;
-  export const YAxis: React.ComponentType<any>;
-  export const Tooltip: React.ComponentType<any>;
-  export const ResponsiveContainer: React.ComponentType<any>;
+  import {
+    BarChart as _BarChart,
+    Bar as _Bar,
+    XAxis as _XAxis,
+    YAxis as _YAxis,
+    Tooltip as _Tooltip,
+    ResponsiveContainer as _ResponsiveContainer
+  } from "recharts";
+
+  export const BarChart: typeof _BarChart;
+  export const Bar: typeof _Bar;
+  export const XAxis: typeof _XAxis;
+  export const YAxis: typeof _YAxis;
+  export const Tooltip: typeof _Tooltip;
+  export const ResponsiveContainer: typeof _ResponsiveContainer;
 }

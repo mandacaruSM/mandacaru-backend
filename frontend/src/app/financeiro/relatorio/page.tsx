@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useDebounce } from "use-debounce"; // npm install use-debounce
+import { useDebounce } from "use-debounce";
 
 interface Conta {
   id: number;
@@ -71,7 +71,7 @@ export default function RelatorioFinanceiroPage() {
   const total = (filtro: Partial<Conta>) =>
     contasFiltradas
       .filter((conta) =>
-        Object.entries(filtro).every(([k, v]) => (conta as any)[k] === v)
+        Object.entries(filtro).every(([k, v]) => conta[k as keyof Conta] === v)
       )
       .reduce((acc, conta) => acc + conta.valor, 0);
 
@@ -114,7 +114,7 @@ export default function RelatorioFinanceiroPage() {
       { nome: "Pagos", valor: total({ status: "pago" }) },
       { nome: "Pendentes", valor: total({ status: "pendente" }) },
     ],
-    [contasFiltradas]
+    [contasFiltradas, total]
   );
 
   if (isLoading) return <div className="p-6">Carregando...</div>;
@@ -172,7 +172,6 @@ export default function RelatorioFinanceiroPage() {
         </div>
       </div>
 
-      {/* Corrigido aqui ↓ */}
       <div className="bg-white p-4 mb-6 rounded shadow">
         <h2 className="text-lg font-semibold mb-2">Resumo em Gráfico</h2>
         <ResponsiveContainer width="100%" height={250}>
