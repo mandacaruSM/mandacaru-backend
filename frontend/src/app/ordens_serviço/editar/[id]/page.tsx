@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
 interface OrdemServico {
@@ -27,7 +27,9 @@ interface Equipamento {
   nome: string;
 }
 
-export default function EditarOrdemServicoPage({ params }: { params: { id: string } }) {
+export default function EditarOrdemServicoPage() {
+  const params = useParams();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const [formData, setFormData] = useState<OrdemServico | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -36,7 +38,7 @@ export default function EditarOrdemServicoPage({ params }: { params: { id: strin
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/ordens-servico/${params.id}/`)
+    fetch(`https://mandacaru-backend-i2ci.onrender.com/api/ordens-servico/${id}/`)
       .then((res) => res.json())
       .then(setFormData)
       .catch(() => alert("Erro ao carregar dados da ordem."));
@@ -49,7 +51,7 @@ export default function EditarOrdemServicoPage({ params }: { params: { id: strin
       .then((res) => res.json())
       .then(setEquipamentos)
       .finally(() => setLoading(false));
-  }, [params.id]);
+  }, [id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -76,7 +78,7 @@ export default function EditarOrdemServicoPage({ params }: { params: { id: strin
     }
 
     const response = await fetch(
-      `https://mandacaru-backend-i2ci.onrender.com/api/ordens-servico/${params.id}/`,
+      `https://mandacaru-backend-i2ci.onrender.com/api/ordens-servico/${id}/`,
       {
         method: "PUT",
         body: formPayload,
@@ -95,7 +97,7 @@ export default function EditarOrdemServicoPage({ params }: { params: { id: strin
     const confirm = window.confirm("Deseja mesmo finalizar a OS via bot?");
     if (!confirm || !formData) return;
 
-    const response = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/ordens-servico/${params.id}/finalizar-bot/`, {
+    const response = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/ordens-servico/${id}/finalizar-bot/`, {
       method: "POST",
     });
 
