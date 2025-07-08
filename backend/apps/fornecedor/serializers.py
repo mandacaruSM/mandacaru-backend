@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from ..models.fornecedor import Fornecedor
+from .models import Fornecedor
 
 class FornecedorSerializer(serializers.ModelSerializer):
     class Meta:

@@ -23,7 +23,7 @@ INSTALLED_APPS = [
     'corsheaders',
 
     'backend.apps.clientes',
-    'backend.apps.fornecedores',
+    'backend.apps.fornecedor',
     'backend.apps.financeiro',
     'backend.apps.equipamentos',
     'backend.apps.manutencao',

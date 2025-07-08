@@ -1,6 +1,6 @@
 from rest_framework import viewsets
-from ..models.fornecedor import Fornecedor
-from ..serializers.fornecedor_serializer import FornecedorSerializer
+from .models import Fornecedor
+from .serializers import FornecedorSerializer
 
 class FornecedorViewSet(viewsets.ModelViewSet):
     queryset = Fornecedor.objects.all()

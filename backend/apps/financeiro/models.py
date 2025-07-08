@@ -1,7 +1,7 @@
 # apps/financeiro/models.py
 from django.db import models
 from backend.apps.clientes.models import Cliente
-from backend.apps.fornecedores.models import Fornecedor
+from backend.apps.fornecedor.models import Fornecedor
 
 class ContaFinanceira(models.Model):
     TIPO_CHOICES = [
