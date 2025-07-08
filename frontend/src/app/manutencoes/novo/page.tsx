@@ -19,7 +19,7 @@ export default function NovaManutencaoPage() {
   horimetro: string;
   tecnico_responsavel: string;
   descricao: string;
-  proxima_manutencao?: string; // ⬅️ agora é opcional
+  proxima_manutencao?: string; // ⮆️ agora é opcional
 }>({
   equipamento: "",
   tipo: "corretiva",

@@ -1,8 +1,8 @@
-// /src/app/almoxarifado/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import axios from "axios";
 
 interface Produto {
   id: number;
@@ -12,31 +12,15 @@ interface Produto {
   estoque_atual: string;
 }
 
-export default function ListaProdutosPage() {
+export default function AlmoxarifadoPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
 
   useEffect(() => {
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/produtos/")
-      .then((res) => res.json())
-      .then(setProdutos)
-      .catch(() => alert("Erro ao carregar produtos"));
+    axios
+      .get<Produto[]>("https://mandacaru-backend-i2ci.onrender.com/api/produtos/")
+      .then((res) => setProdutos(res.data))
+      .catch((err) => console.error("Erro ao carregar produtos:", err));
   }, []);
-
-  const handleDelete = async (id: number) => {
-    if (confirm("Tem certeza que deseja excluir este produto?")) {
-      const res = await fetch(
-        `https://mandacaru-backend-i2ci.onrender.com/api/produtos/${id}/`,
-        {
-          method: "DELETE",
-        }
-      );
-      if (res.ok) {
-        setProdutos(produtos.filter((p) => p.id !== id));
-      } else {
-        alert("Erro ao excluir produto. Verifique se ele está vinculado a movimentações.");
-      }
-    }
-  };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -44,59 +28,55 @@ export default function ListaProdutosPage() {
         <h1 className="text-2xl font-bold text-green-800">Almoxarifado</h1>
         <div className="flex gap-2">
           <Link
-            href="/"
-            className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400"
-          >
-            🏠 Início
-          </Link>
-          <Link
             href="/almoxarifado/novo"
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
           >
-            + Novo Produto
+            Novo Produto
           </Link>
         </div>
       </div>
 
-      <table className="w-full border text-sm">
-        <thead>
-          <tr className="bg-green-100">
-            <th className="border p-2 text-left">Código</th>
-            <th className="border p-2 text-left">Descrição</th>
-            <th className="border p-2 text-left">Unidade</th>
-            <th className="border p-2 text-left">Estoque Atual</th>
-            <th className="border p-2">Ações</th>
+      <table className="w-full bg-white border shadow rounded text-sm">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="p-2 text-left">Código</th>
+            <th className="p-2 text-left">Descrição</th>
+            <th className="p-2 text-left">Unidade</th>
+            <th className="p-2 text-left">Estoque Atual</th>
+            <th className="p-2 text-left">Ações</th>
           </tr>
         </thead>
         <tbody>
-          {produtos.map((p) => (
-            <tr key={p.id} className="border-b hover:bg-green-50">
-              <td className="border p-2">{p.codigo}</td>
-              <td className="border p-2">{p.descricao}</td>
-              <td className="border p-2">{p.unidade_medida}</td>
-              <td className="border p-2">{p.estoque_atual}</td>
-              <td className="border p-2 text-center space-x-2">
-                <Link
-                  href={`/almoxarifado/editar/${p.id}`}
-                  className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                >
-                  Editar
-                </Link>
-                <Link
-                  href={`/almoxarifado/movimentar/${p.id}`}
-                  className="bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700"
-                >
-                  Movimentar
-                </Link>
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  className="bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
-                >
-                  Excluir
-                </button>
+          {produtos.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="p-4 text-center">
+                Nenhum produto encontrado.
               </td>
             </tr>
-          ))}
+          ) : (
+            produtos.map((produto) => (
+              <tr key={produto.id} className="border-t">
+                <td className="p-2">{produto.codigo}</td>
+                <td className="p-2">{produto.descricao}</td>
+                <td className="p-2">{produto.unidade_medida}</td>
+                <td className="p-2">{produto.estoque_atual}</td>
+                <td className="p-2">
+                  <Link
+                    href={`/almoxarifado/editar/${produto.id}`}
+                    className="text-blue-600 hover:underline mr-2"
+                  >
+                    Editar
+                  </Link>
+                  <Link
+                    href={`/almoxarifado/movimentar/${produto.id}`}
+                    className="text-green-600 hover:underline"
+                  >
+                    Movimentar
+                  </Link>
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>

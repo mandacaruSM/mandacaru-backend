@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'backend.apps.almoxarifado',
     'backend.apps.empreendimentos',
     'backend.apps.ordens_servico',
+    'backend.apps.orcamentos',  # ✔ Corrigido aqui
     'backend.apps.relatorios',
     'backend.apps.core',
 ]

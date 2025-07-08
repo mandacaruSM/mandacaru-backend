@@ -1,7 +1,8 @@
+// /src/app/fornecedores/editar/[id]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 
 interface Fornecedor {
@@ -14,10 +15,9 @@ interface Fornecedor {
   observacoes: string;
 }
 
-export default function EditarFornecedorPage() {
+export default function EditarFornecedorPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const id = searchParams.get("id");
+  const { id } = params;
 
   const [formData, setFormData] = useState<Fornecedor>({
     nome_fantasia: "",
@@ -30,11 +30,9 @@ export default function EditarFornecedorPage() {
   });
 
   useEffect(() => {
-    if (id) {
-      axios.get<Fornecedor>(`https://mandacaru-backend-i2ci.onrender.com/api/fornecedores/${id}/`)
-        .then((res) => setFormData(res.data))
-        .catch((err) => console.error("Erro ao carregar dados do fornecedor:", err));
-    }
+    axios.get<Fornecedor>(`https://mandacaru-backend-i2ci.onrender.com/api/fornecedores/${id}/`)
+      .then((res) => setFormData(res.data))
+      .catch((err) => console.error("Erro ao carregar dados do fornecedor:", err));
   }, [id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

@@ -5,15 +5,20 @@ from django.conf.urls.static import static
 
 from rest_framework.routers import DefaultRouter
 from backend.apps.financeiro.views import ContaFinanceiraViewSet
+from backend.apps.orcamentos.views import OrcamentoViewSet
+from backend.apps.ordens_servico.views import OrdemServicoViewSet
 
 # Rotas do DRF
 router = DefaultRouter()
 router.register(r'financeiro/contas', ContaFinanceiraViewSet)
+router.register(r'orcamentos', OrcamentoViewSet)
+router.register(r'ordens-servico', OrdemServicoViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
     # Rotas da API da Mandacaru
+    path('api/', include(router.urls)),
     path('api/clientes/', include('backend.apps.clientes.urls')),
     path('api/ordens/', include('backend.apps.ordens_servico.urls')),
     path('api/manutencoes/', include('backend.apps.manutencao.urls')),

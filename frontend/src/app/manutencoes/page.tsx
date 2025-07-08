@@ -1,3 +1,5 @@
+// (2) --- LISTAGEM DE MANUTENÇÕES ---
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,7 +15,7 @@ interface Manutencao {
   tecnico_responsavel: string;
 }
 
-export default function ManutencoesPage() {
+export function ManutencoesPage() {
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([]);
   const router = useRouter();
 

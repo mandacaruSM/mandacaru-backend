@@ -1,4 +1,4 @@
-// /src/app/almoxarifado/movimentar/[id]/page.tsx
+// /src/app/almoxarifado/movimentar/[id]/page.tsx (MOVIMENTAR PRODUTO)
 "use client";
 
 import { useEffect, useState } from "react";

@@ -1,4 +1,4 @@
-// /src/app/almoxarifado/editar/[id]/page.tsx
+// /src/app/almoxarifado/editar/[id]/page.tsx (EDITAR PRODUTO)
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,8 +20,7 @@ export default function EditarProdutoPage() {
       .then((data) => setFormData(data));
   }, [id]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleChange = (e: any) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 

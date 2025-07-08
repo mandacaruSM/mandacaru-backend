@@ -1,3 +1,4 @@
+// (1) --- EDITAR MANUTENÇÃO ---
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,7 +10,7 @@ interface Equipamento {
   nome: string;
 }
 
-export default function EditarManutencaoPage() {
+export function EditarManutencaoPage() {
   const { id } = useParams();
   const router = useRouter();
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
