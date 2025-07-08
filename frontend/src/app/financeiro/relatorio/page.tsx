@@ -114,7 +114,7 @@ export default function RelatorioFinanceiroPage() {
       { nome: "Pagos", valor: total({ status: "pago" }) },
       { nome: "Pendentes", valor: total({ status: "pendente" }) },
     ],
-    [contasFiltradas, total]
+    [total]
   );
 
   if (isLoading) return <div className="p-6">Carregando...</div>;

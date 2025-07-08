@@ -1,5 +1,4 @@
 declare module "recharts" {
-  import * as React from "react";
   import {
     BarChart as _BarChart,
     Bar as _Bar,
