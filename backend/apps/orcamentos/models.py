@@ -1,4 +1,3 @@
-# backend/apps/orcamentos/models.py
 from django.db import models
 from backend.apps.clientes.models import Cliente
 from backend.apps.equipamentos.models import Equipamento
@@ -12,7 +11,7 @@ class Orcamento(models.Model):
     ]
 
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
-    empreendimento = models.ForeignKey(Equipamento, null=False, on_delete=models.CASCADE)
+    empreendimento = models.ForeignKey(Empreendimento, null=False, on_delete=models.CASCADE)
     equipamento = models.ForeignKey(Equipamento, on_delete=models.CASCADE)
     descricao = models.TextField()
     valor = models.DecimalField(max_digits=10, decimal_places=2)
