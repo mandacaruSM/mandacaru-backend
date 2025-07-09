@@ -25,7 +25,8 @@ export default function OrcamentosPage() {
         if (!res.ok) throw new Error(`Erro: ${res.status}`);
         const data: Orcamento[] = await res.json();
         setItems(data);
-      } catch {
+      } catch (error) {
+        console.error("Falha ao buscar orçamentos:", error);
         alert("Erro ao carregar orçamentos.");
       } finally {
         setLoading(false);
