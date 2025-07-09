@@ -20,6 +20,19 @@ interface Equipamento {
   horimetro: number;
 }
 
+interface EquipamentoData {
+  id: number;
+  nome: string;
+  cliente_obj: { nome_fantasia: string };
+  empreendimento_obj: { nome: string };
+  modelo: string;
+  numero_serie: string;
+  descricao: string;
+  tipo: string;
+  marca: string;
+  horimetro: number;
+}
+
 export default function ListaEquipamentos() {
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
 
@@ -30,7 +43,7 @@ export default function ListaEquipamentos() {
         if (!res.ok) {
           throw new Error(`Erro ao buscar equipamentos: ${res.status}`);
         }
-        const data: any[] = await res.json();
+        const data: EquipamentoData[] = await res.json();
         const parsed: Equipamento[] = data.map((e) => ({
           id: e.id,
           nome: e.nome,
