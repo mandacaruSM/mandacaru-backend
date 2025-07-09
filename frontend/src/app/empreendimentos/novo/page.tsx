@@ -1,6 +1,8 @@
+/* File: app/empreendimentos/novo/page.tsx */
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface Cliente {
@@ -8,11 +10,24 @@ interface Cliente {
   nome_fantasia: string;
 }
 
-export default function NovoEmpreendimento() {
+interface EmpreendimentoFormData {
+  nome: string;
+  cliente: string;
+  endereco: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  localizacao: string;
+  descricao: string;
+  distancia_km: string;
+}
+
+export default function NovoEmpreendimentoPage() {
+  const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EmpreendimentoFormData>({
     nome: "",
-    cliente: 0,
+    cliente: "",
     endereco: "",
     cidade: "",
     estado: "",
@@ -21,92 +36,164 @@ export default function NovoEmpreendimento() {
     descricao: "",
     distancia_km: "",
   });
-
-  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
-      .then((res) => res.json())
+    fetch("/api/clientes/")
+      .then(res => res.json())
       .then(setClientes)
-      .catch((err) => {
-        console.error(err);
-        alert("Erro ao carregar clientes.");
-      });
+      .catch(console.error);
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
+  ) => {
+    const { name, value } = e.target;
+    setFormData(old => ({ ...old, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
     try {
       const payload = {
         ...formData,
         cliente: Number(formData.cliente),
         distancia_km: parseFloat(formData.distancia_km),
       };
-
-      console.log("Payload enviado:", payload);
-
-      const res = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/", {
+      const res = await fetch("/api/empreendimentos/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) throw new Error("Erro ao salvar empreendimento");
-
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erro ${res.status}: ${text}`);
+      }
+      alert("Empreendimento cadastrado com sucesso!");
       router.push("/empreendimentos");
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao salvar empreendimento.");
+    } catch (err) {
+      console.error(err);
+      setError("Falha ao cadastrar empreendimento.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold text-green-800 mb-4">Novo Empreendimento</h1>
+    <div className="p-6 max-w-lg mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Novo Empreendimento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <input type="text" name="nome" placeholder="Nome" onChange={handleChange} className="w-full border rounded p-2" required />
-
-        <select
-          name="cliente"
-          value={formData.cliente}
-          onChange={handleChange}
-          required
-          className="w-full border rounded p-2"
-        >
-          <option value={0}>Selecione um Cliente</option>
-          {clientes.map((c) => (
-            <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
-          ))}
-        </select>
-
-        <input type="text" name="endereco" placeholder="Endereço" onChange={handleChange} className="w-full border rounded p-2" required />
-        <input type="text" name="cidade" placeholder="Cidade" onChange={handleChange} className="w-full border rounded p-2" required />
-        <input type="text" name="estado" placeholder="Estado (ex: MG)" maxLength={2} onChange={handleChange} className="w-full border rounded p-2" required />
-        <input type="text" name="cep" placeholder="CEP" onChange={handleChange} className="w-full border rounded p-2" required />
-
-        <input type="text" name="localizacao" placeholder="Localização" onChange={handleChange} className="w-full border rounded p-2" />
-        <textarea name="descricao" placeholder="Descrição" onChange={handleChange} className="w-full border rounded p-2" />
-        <input type="number" name="distancia_km" placeholder="Distância (km)" onChange={handleChange} className="w-full border rounded p-2" step="0.01" required />
-
-        <div className="flex justify-between">
-          <button
-            type="button"
-            onClick={() => router.push("/empreendimentos")}
-            className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            Salvar
-          </button>
+        <div>
+          <label className="block mb-1">Nome</label>
+          <input
+            name="nome"
+            value={formData.nome}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
         </div>
+        <div>
+          <label className="block mb-1">Cliente</label>
+          <select
+            name="cliente"
+            value={formData.cliente}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          >
+            <option value="">Selecione um cliente</option>
+            {clientes.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.nome_fantasia}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1">Endereço</label>
+          <input
+            name="endereco"
+            value={formData.endereco}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Cidade</label>
+          <input
+            name="cidade"
+            value={formData.cidade}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Estado</label>
+          <input
+            name="estado"
+            value={formData.estado}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">CEP</label>
+          <input
+            name="cep"
+            value={formData.cep}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Localização</label>
+          <input
+            name="localizacao"
+            value={formData.localizacao}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Descrição</label>
+          <textarea
+            name="descricao"
+            value={formData.descricao}
+            onChange={handleChange}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Distância (km)</label>
+          <input
+            type="number"
+            step="0.01"
+            name="distancia_km"
+            value={formData.distancia_km}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        {error && <p className="text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+        >
+          {loading ? "Cadastrando..." : "Cadastrar Empreendimento"}
+        </button>
       </form>
     </div>
   );

@@ -1,8 +1,9 @@
+/* File: app/equipamentos/novo/page.tsx */
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 interface Cliente {
   id: number;
@@ -14,168 +15,195 @@ interface Empreendimento {
   nome: string;
 }
 
+interface EquipamentoFormData {
+  nome: string;
+  marca: string;
+  modelo: string;
+  numero_serie: string;
+  horimetro: string;
+  cliente: string;
+  empreendimento: string;
+}
+
 export default function NovoEquipamentoPage() {
   const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
-  const [formData, setFormData] = useState({
-    cliente: "",
-    empreendimento: "",
+  const [formData, setFormData] = useState<EquipamentoFormData>({
     nome: "",
-    descricao: "",
-    tipo: "",
     marca: "",
     modelo: "",
-    n_serie: "",
+    numero_serie: "",
     horimetro: "",
+    cliente: "",
+    empreendimento: "",
   });
+  const [loadingEmp, setLoadingEmp] = useState(false);
 
   useEffect(() => {
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
-      .then((res) => res.json())
-      .then(setClientes);
-
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/empreendimentos/")
-      .then((res) => res.json())
-      .then(setEmpreendimentos);
+    fetch("/api/clientes/")
+      .then(res => res.json())
+      .then(setClientes)
+      .catch(console.error);
   }, []);
 
+  useEffect(() => {
+    if (!formData.cliente) {
+      setEmpreendimentos([]);
+      setFormData(d => ({ ...d, empreendimento: "" }));
+      return;
+    }
+    setLoadingEmp(true);
+    fetch(`/api/empreendimentos/?cliente=${formData.cliente}`)
+      .then(res => res.json())
+      .then(data => {
+        setEmpreendimentos(data);
+        setFormData(d => ({ ...d, empreendimento: "" }));
+      })
+      .catch(console.error)
+      .finally(() => setLoadingEmp(false));
+  }, [formData.cliente]);
+
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
   ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData(old => ({ ...old, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(
-        "https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Erro ao salvar equipamento");
-      }
-
+      const payload = {
+        nome: formData.nome,
+        marca: formData.marca,
+        modelo: formData.modelo,
+        numero_serie: formData.numero_serie,
+        horimetro: parseFloat(formData.horimetro),
+        cliente: Number(formData.cliente),
+        empreendimento: Number(formData.empreendimento),
+      };
+      const res = await fetch("/api/equipamentos/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`Erro ${res.status}`);
+      alert("Equipamento cadastrado com sucesso!");
       router.push("/equipamentos");
-    } catch (error) {
-      alert("Erro ao salvar equipamento");
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      alert("Falha ao cadastrar equipamento.");
     }
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-green-800 mb-4">Novo Equipamento</h1>
+    <div className="p-6 max-w-lg mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Novo Equipamento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <select
-          name="cliente"
-          value={formData.cliente}
-          onChange={handleChange}
-          required
-          className="border p-2 w-full"
-        >
-          <option value="">Selecione o Cliente</option>
-          {clientes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome_fantasia}
+        <div>
+          <label className="block mb-1">Cliente</label>
+          <select
+            name="cliente"
+            value={formData.cliente}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          >
+            <option value="">Selecione um cliente</option>
+            {clientes.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.nome_fantasia}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1">Empreendimento</label>
+          <select
+            name="empreendimento"
+            value={formData.empreendimento}
+            onChange={handleChange}
+            required
+            disabled={!formData.cliente || loadingEmp}
+            className="w-full border px-3 py-2 rounded disabled:opacity-50"
+          >
+            <option value="">
+              {formData.cliente
+                ? loadingEmp
+                  ? "Carregando..."
+                  : "Selecione um empreendimento"
+                : "Escolha primeiro o cliente"}
             </option>
-          ))}
-        </select>
-
-        <select
-          name="empreendimento"
-          value={formData.empreendimento}
-          onChange={handleChange}
-          required
-          className="border p-2 w-full"
-        >
-          <option value="">Selecione o Empreendimento</option>
-          {empreendimentos.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.nome}
-            </option>
-          ))}
-        </select>
-
-        <input
-          name="nome"
-          value={formData.nome}
-          onChange={handleChange}
-          placeholder="Nome do equipamento"
-          required
-          className="border p-2 w-full"
-        />
-
-        <textarea
-          name="descricao"
-          value={formData.descricao}
-          onChange={handleChange}
-          placeholder="Descrição"
-          className="border p-2 w-full"
-        />
-
-        <input
-          name="tipo"
-          value={formData.tipo}
-          onChange={handleChange}
-          placeholder="Tipo"
-          className="border p-2 w-full"
-        />
-
-        <input
-          name="marca"
-          value={formData.marca}
-          onChange={handleChange}
-          placeholder="Marca"
-          className="border p-2 w-full"
-        />
-
-        <input
-          name="modelo"
-          value={formData.modelo}
-          onChange={handleChange}
-          placeholder="Modelo"
-          className="border p-2 w-full"
-        />
-
-        <input
-          name="n_serie"
-          value={formData.n_serie}
-          onChange={handleChange}
-          placeholder="Número de Série"
-          className="border p-2 w-full"
-        />
-
-        <input
-          type="number"
-          step="0.01"
-          name="horimetro"
-          value={formData.horimetro}
-          onChange={handleChange}
-          placeholder="Horímetro"
-          className="border p-2 w-full"
-        />
-
+            {empreendimentos.map(e => (
+              <option key={e.id} value={e.id}>
+                {e.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* Demais campos do equipamento: nome, marca, modelo, numero_serie, horimetro */}
+        <div>
+          <label className="block mb-1">Nome</label>
+          <input
+            name="nome"
+            value={formData.nome}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Marca</label>
+          <input
+            name="marca"
+            value={formData.marca}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Modelo</label>
+          <input
+            name="modelo"
+            value={formData.modelo}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2.rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Número de Série</label>
+          <input
+            name="numero_serie"
+            value={formData.numero_serie}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2.rounded"
+          />
+        </div>
+        <div>
+          <label className="block mb-1">Horímetro</label>
+          <input
+            type="number"
+            step="0.1"
+            name="horimetro"
+            value={formData.horimetro}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2.rounded"
+          />
+        </div>
         <button
           type="submit"
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg.green-700"
         >
-          Salvar
+          Cadastrar Equipamento
         </button>
       </form>
-
-      <Link
-        href="/equipamentos"
-        className="inline-block mt-4 text-green-600 hover:underline"
-      >
-        Voltar
-      </Link>
     </div>
   );
 }
