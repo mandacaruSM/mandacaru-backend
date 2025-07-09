@@ -28,9 +28,20 @@ export default function NovoFornecedorPage() {
     try {
       await axios.post("https://mandacaru-backend-i2ci.onrender.com/api/fornecedores/", formData);
       router.push("/fornecedores");
-    } catch (error: any) {
-      if (error.response && error.response.data && error.response.data.cnpj) {
-        alert(`Erro: ${error.response.data.cnpj[0]}`);
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        error.response &&
+        typeof error.response === "object" &&
+        "data" in error.response &&
+        error.response.data &&
+        typeof error.response.data === "object" &&
+        "cnpj" in error.response.data
+      ) {
+        const axiosError = error as { response: { data: { cnpj: string[] } } };
+        alert(`Erro: ${axiosError.response.data.cnpj[0]}`);
       } else {
         console.error("Erro ao cadastrar fornecedor:", error);
         alert("Erro ao cadastrar fornecedor. Verifique os dados.");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import axios from "axios";
 import {
   BarChart,
@@ -68,12 +68,17 @@ export default function RelatorioFinanceiroPage() {
     });
   }, [contas, mes, ano, debouncedClienteFiltro, debouncedFornecedorFiltro]);
 
-  const total = (filtro: Partial<Conta>) =>
-    contasFiltradas
-      .filter((conta) =>
-        Object.entries(filtro).every(([k, v]) => conta[k as keyof Conta] === v)
-      )
-      .reduce((acc, conta) => acc + conta.valor, 0);
+  const total = useCallback(
+    (filtro: Partial<Conta>) =>
+      contasFiltradas
+        .filter((conta) =>
+          Object.entries(filtro).every(
+            ([k, v]) => conta[k as keyof Conta] === v
+          )
+        )
+        .reduce((acc, conta) => acc + conta.valor, 0),
+    [contasFiltradas]
+  );
 
   const formatar = (valor: number) =>
     new Intl.NumberFormat("pt-BR", {
