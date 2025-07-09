@@ -1,4 +1,4 @@
-/* File: app/orcamentos/novo/page.tsx */
+// frontend/src/app/orcamentos/novo/page.tsx
 
 "use client";
 
@@ -29,6 +29,8 @@ interface OrcamentoFormData {
   status: string;
   items: Item[];
 }
+
+type FormField = keyof Omit<OrcamentoFormData, "items">;
 
 export default function NovoOrcamentoPage() {
   const router = useRouter();
@@ -76,11 +78,19 @@ export default function NovoOrcamentoPage() {
   const handleFieldChange = (
     e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value } as any));
+    const name = e.target.name as FormField;
+    const value = e.target.value;
+    setForm(prev => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const updateItem = (index: number, field: keyof Item, value: any) => {
+  const updateItem = <K extends keyof Item>(
+    index: number,
+    field: K,
+    value: Item[K]
+  ) => {
     setForm(prev => {
       const items = [...prev.items];
       items[index] = { ...items[index], [field]: value };
@@ -108,32 +118,33 @@ export default function NovoOrcamentoPage() {
     }));
   };
 
-  const calculateDeslocamento = () => {
+  const calculateDeslocamento = (): number => {
     const emp = empreendimentos.find(e => String(e.id) === form.empreendimento);
     const rate = 2; // R$ por km
     return emp ? parseFloat((emp.distancia_km * rate).toFixed(2)) : 0;
   };
 
-  const calculateTotal = () => {
-    const base = form.items.reduce((sum, it) => sum + it.total, 0);
-    return base.toFixed(2);
+  const calculateTotal = (): string => {
+    const total = form.items.reduce((sum, it) => sum + it.total, 0);
+    return total.toFixed(2);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      let payloadItems = [...form.items];
-      if (!payloadItems.some(it => it.tipo === "deslocamento")) {
-        const desloc = calculateDeslocamento();
-        payloadItems.push({
-          tipo: "deslocamento",
-          descricao: "Deslocamento",
-          quantidade: 1,
-          valor_unitario: desloc,
-          total: desloc,
-        });
-      }
 
+    const payloadItems = [...form.items];
+    if (!payloadItems.some(it => it.tipo === "deslocamento")) {
+      const desloc = calculateDeslocamento();
+      payloadItems.push({
+        tipo: "deslocamento",
+        descricao: "Deslocamento",
+        quantidade: 1,
+        valor_unitario: desloc,
+        total: desloc,
+      });
+    }
+
+    try {
       const res = await fetch(`${API}/api/orcamentos/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -174,7 +185,7 @@ export default function NovoOrcamentoPage() {
         });
         if (osRes.ok) {
           const os = await osRes.json();
-          // Registrar saída no almoxarifado vendedor
+          // Registrar saída no almoxarifado
           await fetch(`${API}/api/almoxarifado/saida/`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -199,24 +210,32 @@ export default function NovoOrcamentoPage() {
   if (loading) return <p className="p-6">Carregando…</p>;
 
   return (
-    <div className="p-6 max-w-lg mx-auto space-y-6">
+    <form onSubmit={handleSubmit} className="p-6 max-w-lg mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Novo Orçamento</h1>
-      {/* filtros seleção */}
+
+      {/* seleção de cliente, empreendimento e equipamento */}
       <div className="space-y-2">
         <select name="cliente" value={form.cliente} onChange={handleFieldChange} required>
           <option value="">Selecione Cliente</option>
-          {clientes.map(c => <option key={c.id} value={String(c.id)}>{c.nome_fantasia}</option>)}
+          {clientes.map(c => (
+            <option key={c.id} value={String(c.id)}>{c.nome_fantasia}</option>
+          ))}
         </select>
         <select name="empreendimento" value={form.empreendimento} onChange={handleFieldChange} required>
           <option value="">Selecione Empreendimento</option>
-          {empreendimentos.map(e => <option key={e.id} value={String(e.id)}>{e.nome}</option>)}
+          {empreendimentos.map(e => (
+            <option key={e.id} value={String(e.id)}>{e.nome}</option>
+          ))}
         </select>
         <select name="equipamento" value={form.equipamento} onChange={handleFieldChange} required>
           <option value="">Selecione Equipamento</option>
-          {equipamentos.map(eq => <option key={eq.id} value={String(eq.id)}>{eq.nome}</option>)}
+          {equipamentos.map(eq => (
+            <option key={eq.id} value={String(eq.id)}>{eq.nome}</option>
+          ))}
         </select>
       </div>
-      {/* tabela itens */}
+
+      {/* itens do orçamento */}
       <div>
         <h2 className="text-lg font-semibold mb-2">Itens do Orçamento</h2>
         <table className="w-full border">
@@ -235,25 +254,54 @@ export default function NovoOrcamentoPage() {
             {form.items.map((it, idx) => (
               <tr key={idx}>
                 <td className="p-1">
-                  <select value={it.tipo} onChange={e => updateItem(idx,'tipo',e.target.value)}>
+                  <select
+                    value={it.tipo}
+                    onChange={e => updateItem(idx, "tipo", e.target.value as Item["tipo"])}
+                  >
                     <option value="peca">Peça</option>
                     <option value="deslocamento">Deslocamento</option>
                     <option value="mao_de_obra">Mão de Obra</option>
                   </select>
                 </td>
                 <td className="p-1">
-                  <select value={it.almox_id} onChange={e => updateItem(idx,'almox_id',Number(e.target.value))}>
+                  <select
+                    value={it.almox_id ?? ""}
+                    onChange={e => updateItem(idx, "almox_id", Number(e.target.value) || undefined)}
+                  >
                     <option value="">Selecione Peça</option>
-                    {almoxItems.map(ai => <option key={ai.id} value={ai.id}>
-                      {ai.nome} (Estoque: {ai.estoque})
-                    </option>)}
+                    {almoxItems.map(ai => (
+                      <option key={ai.id} value={ai.id}>
+                        {ai.nome} (Estoque: {ai.estoque})
+                      </option>
+                    ))}
                   </select>
                 </td>
-                <td className="p-1"><input value={it.descricao} onChange={e => updateItem(idx,'descricao',e.target.value)} /></td>
-                <td className="p-1"><input type="number" min="1" value={it.quantidade} onChange={e => updateItem(idx,'quantidade',parseInt(e.target.value))} /></td>
-                <td className="p-1"><input type="number" step="0.01" value={it.valor_unitario} onChange={e => updateItem(idx,'valor_unitario',parseFloat(e.target.value))} /></td>
+                <td className="p-1">
+                  <input
+                    value={it.descricao}
+                    onChange={e => updateItem(idx, "descricao", e.target.value)}
+                  />
+                </td>
+                <td className="p-1">
+                  <input
+                    type="number"
+                    min={1}
+                    value={it.quantidade}
+                    onChange={e => updateItem(idx, "quantidade", parseInt(e.target.value))}
+                  />
+                </td>
+                <td className="p-1">
+                  <input
+                    type="number"
+                    step={0.01}
+                    value={it.valor_unitario}
+                    onChange={e => updateItem(idx, "valor_unitario", parseFloat(e.target.value))}
+                  />
+                </td>
                 <td className="p-1">{it.total.toFixed(2)}</td>
-                <td className="p-1"><button type="button" onClick={() => removeItem(idx)}>Remover</button></td>
+                <td className="p-1">
+                  <button type="button" onClick={() => removeItem(idx)}>Remover</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -262,17 +310,27 @@ export default function NovoOrcamentoPage() {
           + Adicionar Item
         </button>
       </div>
-      {/* status, total e ações */}
-      <select name="status" value={form.status} onChange={handleFieldChange} required className="w-full border px-3 py-2 rounded">
+
+      {/* status e total */}
+      <select
+        name="status"
+        value={form.status}
+        onChange={handleFieldChange}
+        required
+        className="w-full border px-3 py-2 rounded"
+      >
         <option value="pendente">Pendente</option>
         <option value="aprovado">Aprovado</option>
         <option value="rejeitado">Rejeitado</option>
       </select>
       <div className="text-right font-bold">Total: R$ {calculateTotal()}</div>
-      <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">
-        Salvar Orçamento
-      </button>
-      <Link href="/orcamentos" className="inline-block mt-4 text-green-600">Voltar</Link>
-    </div>
+
+      <div className="flex justify-between items-center">
+        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">
+          Salvar Orçamento
+        </button>
+        <Link href="/orcamentos" className="text-green-600">Voltar</Link>
+      </div>
+    </form>
   );
 }
