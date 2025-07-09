@@ -5,6 +5,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+const API = process.env.NEXT_PUBLIC_API_URL!; // ex: "https://mandacaru-backend-i2ci.onrender.com"
+
 interface Cliente {
   id: number;
   nome_fantasia: string;
@@ -41,7 +43,7 @@ export default function NovoEquipamentoPage() {
   const [loadingEmp, setLoadingEmp] = useState(false);
 
   useEffect(() => {
-    fetch("/api/clientes")
+    fetch(`${API}/api/clientes`)
       .then(res => res.json())
       .then(setClientes)
       .catch(console.error);
@@ -54,7 +56,7 @@ export default function NovoEquipamentoPage() {
       return;
     }
     setLoadingEmp(true);
-    fetch(`/api/empreendimentos/?cliente=${formData.cliente}`)
+    fetch(`${API}/api/empreendimentos?cliente=${formData.cliente}`)
       .then(res => res.json())
       .then(data => {
         setEmpreendimentos(data);
@@ -85,7 +87,7 @@ export default function NovoEquipamentoPage() {
         cliente: Number(formData.cliente),
         empreendimento: Number(formData.empreendimento),
       };
-      const res = await fetch("/api/equipamentos/", {
+      const res = await fetch(`${API}/api/equipamentos/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -144,7 +146,8 @@ export default function NovoEquipamentoPage() {
             ))}
           </select>
         </div>
-        {/* Demais campos do equipamento: nome, marca, modelo, numero_serie, horimetro */}
+
+        {/* Campos do equipamento */}
         <div>
           <label className="block mb-1">Nome</label>
           <input
@@ -172,7 +175,7 @@ export default function NovoEquipamentoPage() {
             value={formData.modelo}
             onChange={handleChange}
             required
-            className="w-full border px-3 py-2.rounded"
+            className="w-full border px-3 py-2 rounded"
           />
         </div>
         <div>
@@ -182,7 +185,7 @@ export default function NovoEquipamentoPage() {
             value={formData.numero_serie}
             onChange={handleChange}
             required
-            className="w-full border px-3 py-2.rounded"
+            className="w-full border px-3 py-2 rounded"
           />
         </div>
         <div>
@@ -194,16 +197,16 @@ export default function NovoEquipamentoPage() {
             value={formData.horimetro}
             onChange={handleChange}
             required
-            className="w-full border px-3 py-2.rounded"
+            className="w-full border px-3 py-2 rounded"
           />
         </div>
         <button
           type="submit"
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg.green-700"
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
         >
           Cadastrar Equipamento
         </button>
       </form>
     </div>
-  );
+);
 }

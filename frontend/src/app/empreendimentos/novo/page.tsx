@@ -5,6 +5,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+const API = process.env.NEXT_PUBLIC_API_URL!; // ex: "https://mandacaru-backend-i2ci.onrender.com"
+
 interface Cliente {
   id: number;
   nome_fantasia: string;
@@ -40,8 +42,11 @@ export default function NovoEmpreendimentoPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/clientes")
-      .then(res => res.json())
+    fetch(`${API}/api/clientes`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return res.json();
+      })
       .then(setClientes)
       .catch(console.error);
   }, []);
@@ -65,7 +70,7 @@ export default function NovoEmpreendimentoPage() {
         cliente: Number(formData.cliente),
         distancia_km: parseFloat(formData.distancia_km),
       };
-      const res = await fetch("/api/empreendimentos", {
+      const res = await fetch(`${API}/api/empreendimentos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -88,6 +93,7 @@ export default function NovoEmpreendimentoPage() {
     <div className="p-6 max-w-lg mx-auto">
       <h1 className="text-2xl font-bold mb-4">Novo Empreendimento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Nome */}
         <div>
           <label className="block mb-1">Nome</label>
           <input
@@ -98,6 +104,7 @@ export default function NovoEmpreendimentoPage() {
             className="w-full border px-3 py-2 rounded"
           />
         </div>
+        {/* Cliente */}
         <div>
           <label className="block mb-1">Cliente</label>
           <select
@@ -115,6 +122,7 @@ export default function NovoEmpreendimentoPage() {
             ))}
           </select>
         </div>
+        {/* Endereço */}
         <div>
           <label className="block mb-1">Endereço</label>
           <input
@@ -125,36 +133,34 @@ export default function NovoEmpreendimentoPage() {
             className="w-full border px-3 py-2 rounded"
           />
         </div>
-        <div>
-          <label className="block mb-1">Cidade</label>
+        {/* Cidade / Estado / CEP */}
+        <div className="grid grid-cols-3 gap-2">
           <input
             name="cidade"
             value={formData.cidade}
             onChange={handleChange}
             required
-            className="w-full border px-3 py-2 rounded"
+            placeholder="Cidade"
+            className="border px-3 py-2 rounded"
           />
-        </div>
-        <div>
-          <label className="block mb-1">Estado</label>
           <input
             name="estado"
             value={formData.estado}
             onChange={handleChange}
             required
-            className="w-full border px-3 py-2 rounded"
+            placeholder="Estado"
+            className="border px-3 py-2 rounded"
           />
-        </div>
-        <div>
-          <label className="block mb-1">CEP</label>
           <input
             name="cep"
             value={formData.cep}
             onChange={handleChange}
             required
-            className="w-full border px-3 py-2 rounded"
+            placeholder="CEP"
+            className="border px-3 py-2 rounded"
           />
         </div>
+        {/* Localização */}
         <div>
           <label className="block mb-1">Localização</label>
           <input
@@ -165,6 +171,7 @@ export default function NovoEmpreendimentoPage() {
             className="w-full border px-3 py-2 rounded"
           />
         </div>
+        {/* Descrição */}
         <div>
           <label className="block mb-1">Descrição</label>
           <textarea
@@ -174,6 +181,7 @@ export default function NovoEmpreendimentoPage() {
             className="w-full border px-3 py-2 rounded"
           />
         </div>
+        {/* Distância */}
         <div>
           <label className="block mb-1">Distância (km)</label>
           <input
