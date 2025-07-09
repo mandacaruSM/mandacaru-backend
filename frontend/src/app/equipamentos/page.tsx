@@ -11,7 +11,6 @@ interface Equipamento {
   id: number;
   nome: string;
   cliente_nome: string;
-  equipamento_nome?: string; // renamed on backend
   modelo: string;
   numero_serie: string;
   descricao: string;
@@ -40,11 +39,8 @@ export default function ListaEquipamentos() {
   const handleDelete = async (id: number) => {
     if (!confirm("Deseja realmente excluir este equipamento?")) return;
     const res = await fetch(`${API}/api/equipamentos/${id}/`, { method: "DELETE" });
-    if (res.ok) {
-      setEquipamentos(prev => prev.filter(e => e.id !== id));
-    } else {
-      alert("Erro ao excluir equipamento.");
-    }
+    if (res.ok) setEquipamentos(prev => prev.filter(e => e.id !== id));
+    else alert("Erro ao excluir equipamento.");
   };
 
   return (
@@ -56,7 +52,6 @@ export default function ListaEquipamentos() {
           <Link href="/equipamentos/novo" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">+ Novo Equipamento</Link>
         </div>
       </div>
-
       <table className="w-full border text-sm">
         <thead>
           <tr className="bg-green-100">

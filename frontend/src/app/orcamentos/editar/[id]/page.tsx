@@ -60,15 +60,6 @@ export default function EditarOrcamentoPage() {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const updateItem = <K extends keyof Item>(index: number, field: K, value: Item[K]) => {
-    setForm(prev => {
-      const items = [...prev.items];
-      items[index] = { ...items[index], [field]: value };
-      items[index].total = items[index].quantidade * items[index].valor_unitario;
-      return { ...prev, items };
-    });
-  };
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
@@ -93,7 +84,6 @@ export default function EditarOrcamentoPage() {
       <div className="space-y-2">
         <select name="cliente" value={form.cliente} onChange={handleFieldChange} required>
           <option value="">Selecione Cliente</option>
-          {/* opçons carregadas anteriormente */}
         </select>
         <select name="empreendimento" value={form.empreendimento} onChange={handleFieldChange} required>
           <option value="">Selecione Empreendimento</option>
@@ -103,7 +93,7 @@ export default function EditarOrcamentoPage() {
         </select>
       </div>
 
-      {/* tabela itens similar ao novo */}
+      {/* Itens não editáveis nesta versão; se necessário, renderize tabela aqui */}
 
       <select name="status" value={form.status} onChange={handleFieldChange} required>
         <option value="pendente">Pendente</option>
