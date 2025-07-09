@@ -41,7 +41,7 @@ export default function NovoEquipamentoPage() {
   const [loadingEmp, setLoadingEmp] = useState(false);
 
   useEffect(() => {
-    fetch("/api/clientes/")
+    fetch("/api/clientes")
       .then(res => res.json())
       .then(setClientes)
       .catch(console.error);

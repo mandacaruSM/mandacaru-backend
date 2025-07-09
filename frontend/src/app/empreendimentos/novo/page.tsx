@@ -40,7 +40,7 @@ export default function NovoEmpreendimentoPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/clientes/")
+    fetch("/api/clientes")
       .then(res => res.json())
       .then(setClientes)
       .catch(console.error);
@@ -65,7 +65,7 @@ export default function NovoEmpreendimentoPage() {
         cliente: Number(formData.cliente),
         distancia_km: parseFloat(formData.distancia_km),
       };
-      const res = await fetch("/api/empreendimentos/", {
+      const res = await fetch("/api/empreendimentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
