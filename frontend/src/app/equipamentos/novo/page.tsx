@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const API = process.env.NEXT_PUBLIC_API_URL!; // ex: "https://mandacaru-backend-i2ci.onrender.com"
+const API = process.env.NEXT_PUBLIC_API_URL!;
 
 interface Cliente {
   id: number;
@@ -42,13 +42,18 @@ export default function NovoEquipamentoPage() {
   });
   const [loadingEmp, setLoadingEmp] = useState(false);
 
+  // Carrega clientes ao montar
   useEffect(() => {
-    fetch(`${API}/api/clientes`)
-      .then(res => res.json())
+    fetch(`${API}/api/clientes/`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Erro ao buscar clientes: ${res.status}`);
+        return res.json();
+      })
       .then(setClientes)
-      .catch(console.error);
+      .catch(err => console.error(err));
   }, []);
 
+  // Carrega empreendimentos quando cliente mudar
   useEffect(() => {
     if (!formData.cliente) {
       setEmpreendimentos([]);
@@ -56,13 +61,16 @@ export default function NovoEquipamentoPage() {
       return;
     }
     setLoadingEmp(true);
-    fetch(`${API}/api/empreendimentos?cliente=${formData.cliente}`)
-      .then(res => res.json())
+    fetch(`${API}/api/empreendimentos/?cliente=${formData.cliente}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Erro ao buscar empreendimentos: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         setEmpreendimentos(data);
         setFormData(d => ({ ...d, empreendimento: "" }));
       })
-      .catch(console.error)
+      .catch(err => console.error(err))
       .finally(() => setLoadingEmp(false));
   }, [formData.cliente]);
 
@@ -72,7 +80,7 @@ export default function NovoEquipamentoPage() {
     >
   ) => {
     const { name, value } = e.target;
-    setFormData(old => ({ ...old, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,7 +100,10 @@ export default function NovoEquipamentoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`Erro ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erro ${res.status}: ${text}`);
+      }
       alert("Equipamento cadastrado com sucesso!");
       router.push("/equipamentos");
     } catch (err) {
@@ -105,6 +116,7 @@ export default function NovoEquipamentoPage() {
     <div className="p-6 max-w-lg mx-auto">
       <h1 className="text-2xl font-bold mb-4">Novo Equipamento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Cliente */}
         <div>
           <label className="block mb-1">Cliente</label>
           <select
@@ -122,6 +134,7 @@ export default function NovoEquipamentoPage() {
             ))}
           </select>
         </div>
+        {/* Empreendimento */}
         <div>
           <label className="block mb-1">Empreendimento</label>
           <select
@@ -146,7 +159,6 @@ export default function NovoEquipamentoPage() {
             ))}
           </select>
         </div>
-
         {/* Campos do equipamento */}
         <div>
           <label className="block mb-1">Nome</label>
@@ -208,5 +220,5 @@ export default function NovoEquipamentoPage() {
         </button>
       </form>
     </div>
-);
+  );
 }
