@@ -1,16 +1,16 @@
-/* File: app/orcamentos/page.tsx */
+// File: src/app/orcamentos/page.tsx
 
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-const API = process.env.NEXT_PUBLIC_API_URL!; // ex: https://mandacaru-backend-i2ci.onrender.com
+const API = process.env.NEXT_PUBLIC_API_URL!;
 
 interface Orcamento {
   id: number;
   cliente_nome: string;
   equipamento_nome: string;
-  valor: number;
+  valor_total: number;
   status: string;
 }
 
@@ -19,23 +19,19 @@ export default function OrcamentosPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/api/orcamentos/`)
-      .then(res => {
-        if (!res.ok) throw new Error(`Erro ao buscar orçamentos: ${res.status}`);
-        return res.json();
-      })
-      .then((data: any[]) => {
-        const parsed = data.map(o => ({
-          id: o.id,
-          cliente_nome: o.cliente_obj?.nome_fantasia || "-",
-          equipamento_nome: o.equipamento_obj?.nome || "-",
-          valor: o.valor,
-          status: o.status,
-        }));
-        setItems(parsed);
-      })
-      .catch(() => alert("Erro ao carregar orçamentos."))
-      .finally(() => setLoading(false));
+    async function fetchOrcamentos() {
+      try {
+        const res = await fetch(`${API}/api/orcamentos/`);
+        if (!res.ok) throw new Error(`Erro: ${res.status}`);
+        const data: Orcamento[] = await res.json();
+        setItems(data);
+      } catch {
+        alert("Erro ao carregar orçamentos.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchOrcamentos();
   }, []);
 
   if (loading) return <p className="p-6">Carregando orçamentos…</p>;
@@ -44,12 +40,7 @@ export default function OrcamentosPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Orçamentos</h1>
-        <Link
-          href="/orcamentos/novo"
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-        >
-          + Novo Orçamento
-        </Link>
+        <Link href="/orcamentos/novo" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">+ Novo Orçamento</Link>
       </div>
       <table className="w-full border text-sm">
         <thead>
@@ -68,15 +59,10 @@ export default function OrcamentosPage() {
               <td className="border p-2">{o.id}</td>
               <td className="border p-2">{o.cliente_nome}</td>
               <td className="border p-2">{o.equipamento_nome}</td>
-              <td className="border p-2">{o.valor.toFixed(2)}</td>
+              <td className="border p-2">R$ {o.valor_total.toFixed(2)}</td>
               <td className="border p-2">{o.status}</td>
               <td className="border p-2 text-center">
-                <Link
-                  href={`/orcamentos/editar/${o.id}`}
-                  className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                >
-                  Editar
-                </Link>
+                <Link href={`/orcamentos/editar/${o.id}`} className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Editar</Link>
               </td>
             </tr>
           ))}

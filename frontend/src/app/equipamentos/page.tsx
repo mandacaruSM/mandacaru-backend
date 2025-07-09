@@ -1,4 +1,4 @@
-/* File: src/app/equipamentos/page.tsx */
+// File: src/app/equipamentos/page.tsx
 
 "use client";
 
@@ -11,7 +11,7 @@ interface Equipamento {
   id: number;
   nome: string;
   cliente_nome: string;
-  empreendimento_nome: string;
+  equipamento_nome?: string; // renamed on backend
   modelo: string;
   numero_serie: string;
   descricao: string;
@@ -24,40 +24,26 @@ export default function ListaEquipamentos() {
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
 
   useEffect(() => {
-    fetch(`${API}/api/equipamentos/`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Erro ao buscar equipamentos: ${res.status}`);
-        return res.json();
-      })
-      .then((data: any[]) => {
-        // Mapear resposta para o formato Equipamento
-        const parsed: Equipamento[] = data.map((e) => ({
-          id: e.id,
-          nome: e.nome,
-          cliente_nome: e.cliente_obj?.nome_fantasia || "-",
-          empreendimento_nome: e.empreendimento_obj?.nome || "-",
-          modelo: e.modelo,
-          numero_serie: e.numero_serie,
-          descricao: e.descricao || "",
-          tipo: e.tipo || "",
-          marca: e.marca || "",
-          horimetro: e.horimetro,
-        }));
-        setEquipamentos(parsed);
-      })
-      .catch(() => alert("Erro ao carregar equipamentos."));
+    async function fetchEquipamentos() {
+      try {
+        const res = await fetch(`${API}/api/equipamentos/`);
+        if (!res.ok) throw new Error(`Erro: ${res.status}`);
+        const data: Equipamento[] = await res.json();
+        setEquipamentos(data);
+      } catch {
+        alert("Erro ao carregar equipamentos.");
+      }
+    }
+    fetchEquipamentos();
   }, []);
 
   const handleDelete = async (id: number) => {
-    if (confirm("Deseja realmente excluir este equipamento?")) {
-      const res = await fetch(`${API}/api/equipamentos/${id}/`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        setEquipamentos((prev) => prev.filter((e) => e.id !== id));
-      } else {
-        alert("Erro ao excluir equipamento.");
-      }
+    if (!confirm("Deseja realmente excluir este equipamento?")) return;
+    const res = await fetch(`${API}/api/equipamentos/${id}/`, { method: "DELETE" });
+    if (res.ok) {
+      setEquipamentos(prev => prev.filter(e => e.id !== id));
+    } else {
+      alert("Erro ao excluir equipamento.");
     }
   };
 
@@ -66,18 +52,8 @@ export default function ListaEquipamentos() {
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-green-800">Equipamentos</h1>
         <div className="flex gap-2">
-          <Link
-            href="/"
-            className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400"
-          >
-            🏠 Início
-          </Link>
-          <Link
-            href="/equipamentos/novo"
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            + Novo Equipamento
-          </Link>
+          <Link href="/" className="bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400">🏠 Início</Link>
+          <Link href="/equipamentos/novo" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">+ Novo Equipamento</Link>
         </div>
       </div>
 
@@ -86,7 +62,6 @@ export default function ListaEquipamentos() {
           <tr className="bg-green-100">
             <th className="border p-2 text-left">Nome</th>
             <th className="border p-2 text-left">Cliente</th>
-            <th className="border p-2 text-left">Empreendimento</th>
             <th className="border p-2 text-left">Modelo</th>
             <th className="border p-2 text-left">Nº Série</th>
             <th className="border p-2 text-left">Descrição</th>
@@ -97,11 +72,10 @@ export default function ListaEquipamentos() {
           </tr>
         </thead>
         <tbody>
-          {equipamentos.map((e) => (
+          {equipamentos.map(e => (
             <tr key={e.id} className="border-b hover:bg-green-50">
               <td className="border p-2">{e.nome}</td>
               <td className="border p-2">{e.cliente_nome}</td>
-              <td className="border p-2">{e.empreendimento_nome}</td>
               <td className="border p-2">{e.modelo}</td>
               <td className="border p-2">{e.numero_serie}</td>
               <td className="border p-2">{e.descricao}</td>
@@ -109,18 +83,8 @@ export default function ListaEquipamentos() {
               <td className="border p-2">{e.marca}</td>
               <td className="border p-2">{e.horimetro}</td>
               <td className="border p-2 text-center space-x-2">
-                <Link
-                  href={`/equipamentos/editar/${e.id}`}
-                  className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                >
-                  Editar
-                </Link>
-                <button
-                  onClick={() => handleDelete(e.id)}
-                  className="bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
-                >
-                  Excluir
-                </button>
+                <Link href={`/equipamentos/editar/${e.id}`} className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Editar</Link>
+                <button onClick={() => handleDelete(e.id)} className="bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">Excluir</button>
               </td>
             </tr>
           ))}
