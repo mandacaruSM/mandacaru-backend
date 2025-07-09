@@ -1,138 +1,81 @@
+// frontend/src/app/ordens-servico/novo/page.tsx
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
-interface Cliente {
-  id: number;
-  nome_fantasia: string;
-}
+interface Cliente { id: number; nome_fantasia: string }
+interface Equipamento { id: number; nome: string }
 
-interface Equipamento {
-  id: number;
-  nome: string;
-}
-
-export default function NovaOrdemServicoPage() {
+export default function NovaOSPage() {
   const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
-  const [anexoFile, setAnexoFile] = useState<File | null>(null);
-  const [formData, setFormData] = useState({
-    cliente: "",
-    equipamento: "",
-    data_abertura: "",
-    tecnico_responsavel: "",
-    descricao: "",
-    servicos_realizados: "",
-    valor_total: "",
-    finalizada: false,
-  });
+  const [form, setForm] = useState({ cliente: "", equipamento: "", descricao: "" });
 
   useEffect(() => {
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/clientes/")
-      .then((res) => res.json())
-      .then(setClientes);
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/")
-      .then((res) => res.json())
-      .then(setEquipamentos);
+    Promise.all([
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/clientes/`).then(res => res.json()),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/equipamentos/`).then(res => res.json()),
+    ])
+      .then(([cli, eq]) => {
+        setClientes(cli);
+        setEquipamentos(eq);
+      })
+      .catch(() => alert("Erro ao carregar dados."));
   }, []);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: name === "finalizada" ? value === "true" : value });
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setAnexoFile(e.target.files[0]);
-    }
+    setForm(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const payload = new FormData();
-    Object.entries(formData).forEach(([key, value]) => {
-      payload.append(key, value.toString());
-    });
-    if (anexoFile) {
-      payload.append("anexo", anexoFile);
-    }
-
-    const response = await fetch("https://mandacaru-backend-i2ci.onrender.com/api/ordens-servico/", {
-      method: "POST",
-      body: payload,
-    });
-
-    if (response.ok) {
-      alert("Ordem de serviço criada com sucesso.");
-      router.push("/ordens-servico");
-    } else {
-      alert("Erro ao criar ordem de serviço.");
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ordens-servico/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cliente: Number(form.cliente),
+          equipamento: Number(form.equipamento),
+          descricao: form.descricao,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      router.push('/ordens-servico');
+    } catch {
+      alert("Erro ao criar OS.");
     }
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4 text-green-800">Nova Ordem de Serviço</h1>
-      <form onSubmit={handleSubmit} className="space-y-4" encType="multipart/form-data">
-
-        <label className="block">
-          Cliente:
-          <select name="cliente" value={formData.cliente} onChange={handleChange} className="border p-2 w-full" required>
-            <option value="">Selecione</option>
-            {clientes.map((cliente) => (
-              <option key={cliente.id} value={cliente.id}>{cliente.nome_fantasia}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          Equipamento:
-          <select name="equipamento" value={formData.equipamento} onChange={handleChange} className="border p-2 w-full" required>
-            <option value="">Selecione</option>
-            {equipamentos.map((eq) => (
-              <option key={eq.id} value={eq.id}>{eq.nome}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          Data de Abertura:
-          <input type="date" name="data_abertura" value={formData.data_abertura} onChange={handleChange} className="border p-2 w-full" required />
-        </label>
-
-        <label className="block">
-          Técnico Responsável:
-          <input type="text" name="tecnico_responsavel" value={formData.tecnico_responsavel} onChange={handleChange} className="border p-2 w-full" />
-        </label>
-
-        <label className="block">
-          Descrição:
-          <textarea name="descricao" value={formData.descricao} onChange={handleChange} className="border p-2 w-full" />
-        </label>
-
-        <label className="block">
-          Serviços Realizados:
-          <textarea name="servicos_realizados" value={formData.servicos_realizados} onChange={handleChange} className="border p-2 w-full" />
-        </label>
-
-        <label className="block">
-          Valor Total (R$):
-          <input type="number" name="valor_total" value={formData.valor_total} onChange={handleChange} className="border p-2 w-full" step="0.01" />
-        </label>
-
-        <label className="block">
-          Anexo (PDF ou imagem):
-          <input type="file" accept="application/pdf,image/*" onChange={handleFileChange} className="border p-2 w-full" />
-        </label>
-
-        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Salvar</button>
-        <Link href="/ordens-servico" className="ml-4 text-blue-500 underline">Cancelar</Link>
+    <div className="p-6 max-w-lg mx-auto space-y-4">
+      <h1 className="text-2xl font-bold">Nova Ordem de Serviço</h1>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <select name="cliente" value={form.cliente} onChange={handleChange} required>
+          <option value="">Selecione Cliente</option>
+          {clientes.map(c => (
+            <option key={c.id} value={String(c.id)}>{c.nome_fantasia}</option>
+          ))}
+        </select>
+        <select name="equipamento" value={form.equipamento} onChange={handleChange} required>
+          <option value="">Selecione Equipamento</option>
+          {equipamentos.map(eq => (
+            <option key={eq.id} value={String(eq.id)}>{eq.nome}</option>
+          ))}
+        </select>
+        <textarea
+          name="descricao"
+          value={form.descricao}
+          onChange={e => setForm(prev => ({ ...prev, descricao: e.target.value }))}
+          placeholder="Descrição"
+          className="w-full h-24 border p-2 rounded"
+        />
+        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">
+          Criar OS
+        </button>
       </form>
     </div>
   );

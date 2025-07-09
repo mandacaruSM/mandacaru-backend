@@ -1,26 +1,34 @@
 # backend/apps/ordens_servico/models.py
 from django.db import models
+from django.utils import timezone
+
+from backend.apps.clientes.models import Cliente
+from backend.apps.equipamentos.models import Equipamento
 from backend.apps.orcamentos.models import Orcamento
-from backend.apps.financeiro.models import ContaReceber
 
 class OrdemServico(models.Model):
-    orcamento = models.OneToOneField(Orcamento, on_delete=models.CASCADE)
-    descricao_servico = models.TextField()
-    data_execucao = models.DateField(auto_now_add=True)
+    orcamento = models.OneToOneField(
+        Orcamento,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ordem_servico'
+    )
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name='ordens_servico'
+    )
+    equipamento = models.ForeignKey(
+        Equipamento,
+        on_delete=models.CASCADE,
+        related_name='ordens_servico'
+    )
+    data_abertura = models.DateTimeField(default=timezone.now)
+    data_fechamento = models.DateTimeField(null=True, blank=True)
+    descricao = models.TextField(blank=True)
     finalizada = models.BooleanField(default=False)
-    criado_via_bot = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"OS #{self.id} para Orçamento #{self.orcamento.id}"
-
-    def finalizar_os(self):
-        self.finalizada = True
-        self.save()
-
-        # Gera conta a receber no financeiro
-        ContaReceber.objects.create(
-            cliente=self.orcamento.cliente,
-            descricao=f"Ordem de Serviço #{self.id} finalizada",
-            valor=self.orcamento.valor,
-            vencimento=self.data_execucao
-        )
+        status = 'Finalizada' if self.finalizada else 'Aberta'
+        return f"OS #{self.id} - {status}"

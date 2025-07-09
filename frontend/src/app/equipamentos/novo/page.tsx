@@ -19,6 +19,7 @@ interface Empreendimento {
 
 interface EquipamentoFormData {
   nome: string;
+  tipo: string;
   marca: string;
   modelo: string;
   numero_serie: string;
@@ -33,6 +34,7 @@ export default function NovoEquipamentoPage() {
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
   const [formData, setFormData] = useState<EquipamentoFormData>({
     nome: "",
+    tipo: "",
     marca: "",
     modelo: "",
     numero_serie: "",
@@ -42,7 +44,7 @@ export default function NovoEquipamentoPage() {
   });
   const [loadingEmp, setLoadingEmp] = useState(false);
 
-  // Carrega clientes ao montar
+  // Carrega clientes
   useEffect(() => {
     fetch(`${API}/api/clientes/`)
       .then(res => {
@@ -50,14 +52,14 @@ export default function NovoEquipamentoPage() {
         return res.json();
       })
       .then(setClientes)
-      .catch(err => console.error(err));
+      .catch(console.error);
   }, []);
 
-  // Carrega empreendimentos quando cliente mudar
+  // Carrega empreendimentos ao escolher cliente
   useEffect(() => {
     if (!formData.cliente) {
       setEmpreendimentos([]);
-      setFormData(d => ({ ...d, empreendimento: "" }));
+      setFormData(prev => ({ ...prev, empreendimento: "" }));
       return;
     }
     setLoadingEmp(true);
@@ -68,16 +70,14 @@ export default function NovoEquipamentoPage() {
       })
       .then(data => {
         setEmpreendimentos(data);
-        setFormData(d => ({ ...d, empreendimento: "" }));
+        setFormData(prev => ({ ...prev, empreendimento: "" }));
       })
-      .catch(err => console.error(err))
+      .catch(console.error)
       .finally(() => setLoadingEmp(false));
   }, [formData.cliente]);
 
   const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -87,10 +87,7 @@ export default function NovoEquipamentoPage() {
     e.preventDefault();
     try {
       const payload = {
-        nome: formData.nome,
-        marca: formData.marca,
-        modelo: formData.modelo,
-        numero_serie: formData.numero_serie,
+        ...formData,
         horimetro: parseFloat(formData.horimetro),
         cliente: Number(formData.cliente),
         empreendimento: Number(formData.empreendimento),
@@ -116,6 +113,27 @@ export default function NovoEquipamentoPage() {
     <div className="p-6 max-w-lg mx-auto">
       <h1 className="text-2xl font-bold mb-4">Novo Equipamento</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Tipo */}
+        <div>
+          <label className="block mb-1">Tipo</label>
+          <select
+            name="tipo"
+            value={formData.tipo}
+            onChange={handleChange}
+            required
+            className="w-full border px-3 py-2 rounded"
+          >
+            <option value="">Selecione um tipo</option>
+            <option value="carregadeira">Carregadeira</option>
+            <option value="escavadeira">Escavadeira</option>
+            <option value="trator">Trator</option>
+            <option value="gerador">Gerador</option>
+            <option value="compressor">Compressor</option>
+            <option value="caminhao">Caminhão</option>
+            <option value="veiculo_leve">Veículo Leve</option>
+          </select>
+        </div>
+
         {/* Cliente */}
         <div>
           <label className="block mb-1">Cliente</label>
@@ -134,6 +152,7 @@ export default function NovoEquipamentoPage() {
             ))}
           </select>
         </div>
+
         {/* Empreendimento */}
         <div>
           <label className="block mb-1">Empreendimento</label>
@@ -159,7 +178,8 @@ export default function NovoEquipamentoPage() {
             ))}
           </select>
         </div>
-        {/* Campos do equipamento */}
+
+        {/* Demais campos do equipamento */}
         <div>
           <label className="block mb-1">Nome</label>
           <input
@@ -212,6 +232,7 @@ export default function NovoEquipamentoPage() {
             className="w-full border px-3 py-2 rounded"
           />
         </div>
+
         <button
           type="submit"
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"

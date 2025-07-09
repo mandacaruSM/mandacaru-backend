@@ -1,8 +1,11 @@
-// /src/app/equipamentos/page.tsx
+/* File: src/app/equipamentos/page.tsx */
+
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+
+const API = process.env.NEXT_PUBLIC_API_URL!;
 
 interface Equipamento {
   id: number;
@@ -14,26 +17,44 @@ interface Equipamento {
   descricao: string;
   tipo: string;
   marca: string;
-  horimetro: string;
+  horimetro: number;
 }
 
 export default function ListaEquipamentos() {
   const [equipamentos, setEquipamentos] = useState<Equipamento[]>([]);
 
   useEffect(() => {
-    fetch("https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/")
-      .then((res) => res.json())
-      .then((data) => setEquipamentos(data))
+    fetch(`${API}/api/equipamentos/`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Erro ao buscar equipamentos: ${res.status}`);
+        return res.json();
+      })
+      .then((data: any[]) => {
+        // Mapear resposta para o formato Equipamento
+        const parsed: Equipamento[] = data.map((e) => ({
+          id: e.id,
+          nome: e.nome,
+          cliente_nome: e.cliente_obj?.nome_fantasia || "-",
+          empreendimento_nome: e.empreendimento_obj?.nome || "-",
+          modelo: e.modelo,
+          numero_serie: e.numero_serie,
+          descricao: e.descricao || "",
+          tipo: e.tipo || "",
+          marca: e.marca || "",
+          horimetro: e.horimetro,
+        }));
+        setEquipamentos(parsed);
+      })
       .catch(() => alert("Erro ao carregar equipamentos."));
   }, []);
 
   const handleDelete = async (id: number) => {
     if (confirm("Deseja realmente excluir este equipamento?")) {
-      const res = await fetch(`https://mandacaru-backend-i2ci.onrender.com/api/equipamentos/${id}/`, {
+      const res = await fetch(`${API}/api/equipamentos/${id}/`, {
         method: "DELETE",
       });
       if (res.ok) {
-        setEquipamentos(equipamentos.filter((e) => e.id !== id));
+        setEquipamentos((prev) => prev.filter((e) => e.id !== id));
       } else {
         alert("Erro ao excluir equipamento.");
       }

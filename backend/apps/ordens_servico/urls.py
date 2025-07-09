@@ -3,6 +3,6 @@ from rest_framework.routers import DefaultRouter
 from .views import OrdemServicoViewSet
 
 router = DefaultRouter()
-router.register(r'', OrdemServicoViewSet, basename='ordemservico')
+router.register(r'ordens-servico', OrdemServicoViewSet, basename='ordens-servico')
 
 urlpatterns = router.urls
