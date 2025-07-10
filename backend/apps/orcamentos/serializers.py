@@ -1,55 +1,41 @@
-# backend/apps/orcamentos/serializers.py
 from rest_framework import serializers
+from .models import Orcamento, OrcamentoItem
 
-from .models import Orcamento
-from backend.apps.ordens_servico.models import OrdemServico
+class OrcamentoItemSerializer(serializers.ModelSerializer):
+    produto_nome = serializers.CharField(source='produto.nome', read_only=True)
 
-class ItemOrcamentoSerializer(serializers.Serializer):
-    tipo = serializers.ChoiceField(choices=[('peca','Peça'),('deslocamento','Deslocamento'),('mao_de_obra','Mão de Obra')])
-    almoxarifado_item = serializers.IntegerField(required=False, allow_null=True)
-    descricao = serializers.CharField()
-    quantidade = serializers.IntegerField()
-    valor_unitario = serializers.DecimalField(max_digits=12, decimal_places=2)
+    class Meta:
+        model = OrcamentoItem
+        fields = ['id', 'produto', 'produto_nome', 'quantidade', 'preco_unitario', 'subtotal']
 
 class OrcamentoSerializer(serializers.ModelSerializer):
-    items = ItemOrcamentoSerializer(many=True, write_only=True)
+    itens = OrcamentoItemSerializer(many=True)
+    distancia_km = serializers.DecimalField(max_digits=8, decimal_places=2, read_only=True)
+    custo_deslocamento = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
         model = Orcamento
-        fields = ['id', 'cliente', 'empreendimento', 'equipamento', 'data_criacao', 'valor_total', 'status', 'items']
-        read_only_fields = ['id', 'data_criacao', 'valor_total']
+        fields = [
+            'id', 'cliente', 'empreendimento', 'data_criacao', 'data_vencimento',
+            'distancia_km', 'custo_deslocamento', 'itens', 'valor_total', 'status'
+        ]
 
     def create(self, validated_data):
-        items_data = validated_data.pop('items', [])
-        # calcula valor_total
-        total = sum([it['quantidade'] * it['valor_unitario'] for it in items_data])
-        validated_data['valor_total'] = total
+        itens_data = validated_data.pop('itens')
         orc = super().create(validated_data)
-        # aqui você pode criar registro de itens associados, se tiver modelo
+        for item in itens_data:
+            OrcamentoItem.objects.create(
+                orcamento=orc,
+                **item
+            )
         return orc
 
     def update(self, instance, validated_data):
-        old_status = instance.status
-        items_data = validated_data.pop('items', None)
-
-        # se houver itens, atualize valor_total
-        if items_data is not None:
-            total = sum([it['quantidade'] * it['valor_unitario'] for it in items_data])
-            validated_data['valor_total'] = total
-        
+        itens_data = validated_data.pop('itens', None)
         instance = super().update(instance, validated_data)
-
-        # dispara criação de OS quando status muda para aprovado
-        if old_status != 'A' and instance.status == 'A' and not instance.os_criada:
-            OrdemServico.objects.create(
-                orcamento=instance,
-                cliente=instance.cliente,
-                equipamento=instance.equipamento,
-                data_abertura=timezone.now(),
-                descricao=f"OS gerada a partir do orçamento #{instance.id}",
-                finalizada=False,
-            )
-            instance.os_criada = True
-            instance.save(update_fields=['os_criada'])
-
+        if itens_data is not None:
+            # deletar e recriar para simplificar
+            instance.itens.all().delete()
+            for item in itens_data:
+                OrcamentoItem.objects.create(orcamento=instance, **item)
         return instance
