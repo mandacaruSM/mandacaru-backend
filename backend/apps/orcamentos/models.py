@@ -1,4 +1,3 @@
-# backend/apps/orcamentos/models.py
 from django.db import models
 from django.db.models import Sum, F
 
@@ -10,7 +9,7 @@ class Orcamento(models.Model):
         ('CANCELADO', 'Cancelado'),
     ]
 
-    cliente = models.ForeignKey('cliente.Cliente', on_delete=models.CASCADE, related_name='orcamentos')
+    cliente = models.ForeignKey('clientes.Cliente', on_delete=models.CASCADE, related_name='orcamentos')
     empreendimento = models.ForeignKey(
         'empreendimentos.Empreendimento', on_delete=models.PROTECT, related_name='orcamentos'
     )
@@ -23,7 +22,7 @@ class Orcamento(models.Model):
     aprovado_por_bot = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"Orçamento #{self.pk} - {self.cliente.nome}"
+        return f"Orçamento #{self.pk} - {self.cliente.razao_social}"
 
 class OrcamentoItem(models.Model):
     orcamento = models.ForeignKey(Orcamento, on_delete=models.CASCADE, related_name='itens')

@@ -1,8 +1,15 @@
+# ================================================================
+# 1. ATUALIZAR backend/settings.py
+# ================================================================
+
 from pathlib import Path
 from decouple import config
 import os
 import dj_database_url
-import sys
+import django
+print("Apps instalados:")
+for app in django.conf.settings.INSTALLED_APPS:
+    print(f"  - {app}")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,6 +29,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
 
+    # Apps existentes
     'backend.apps.clientes',
     'backend.apps.fornecedor',
     'backend.apps.financeiro',
@@ -30,9 +38,16 @@ INSTALLED_APPS = [
     'backend.apps.almoxarifado',
     'backend.apps.empreendimentos',
     'backend.apps.ordens_servico',
-    'backend.apps.orcamentos',  # ✔ Corrigido aqui
+    'backend.apps.orcamentos',
     'backend.apps.relatorios',
     'backend.apps.core',
+    
+    # ✅ NOVOS APPS
+    'rest_framework.authtoken',
+    'backend.apps.auth_cliente',
+    'backend.apps.nr12_checklist',
+    'backend.apps.cliente_portal',
+    'backend.apps.bot_telegram',
 ]
 
 MIDDLEWARE = [
@@ -47,7 +62,28 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# ✅ NOVO: Configuração do Django REST Framework
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
+        'rest_framework.filters.OrderingFilter',
+    ],
+}
+
 ROOT_URLCONF = 'backend.urls'
+
+# ✅ NOVO: Usar o modelo customizado de usuário
+# AUTH_USER_MODEL = 'auth_cliente.UsuarioCliente'
 
 TEMPLATES = [{
     'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -72,6 +108,7 @@ DATABASES = {
     )
 }
 
+
 AUTH_PASSWORD_VALIDATORS = []
 
 LANGUAGE_CODE = 'pt-br'
@@ -83,13 +120,35 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS seguro
+# CORS
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://mandacaru-frontend-ovld.onrender.com",
 ]
 
-# Upload de imagens (comprovantes, fotos de OS, etc.)
+# Upload de arquivos
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# ✅ NOVO: Configurações do Telegram Bot
+TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
+TELEGRAM_WEBHOOK_URL = config('TELEGRAM_WEBHOOK_URL', default='')
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
+        'rest_framework.filters.OrderingFilter',
+    ],
+}
+AUTH_USER_MODEL = 'auth_cliente.UsuarioCliente'

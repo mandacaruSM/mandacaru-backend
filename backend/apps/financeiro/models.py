@@ -1,4 +1,4 @@
-# apps/financeiro/models.py
+#backend/apps/financeiro/models.py (arquivo único)
 from django.db import models
 from backend.apps.clientes.models import Cliente
 from backend.apps.fornecedor.models import Fornecedor
@@ -15,6 +15,12 @@ class ContaFinanceira(models.Model):
         ("Dinheiro", "Dinheiro"),
         ("Cartão", "Cartão")
     ]
+    STATUS_CHOICES = [
+        ("pendente", "Pendente"),
+        ("pago", "Pago"),
+        ("vencido", "Vencido"),
+        ("cancelado", "Cancelado")
+    ]
 
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
     descricao = models.CharField(max_length=255)
@@ -22,12 +28,44 @@ class ContaFinanceira(models.Model):
     vencimento = models.DateField()
     data_pagamento = models.DateField(null=True, blank=True)
     forma_pagamento = models.CharField(max_length=20, choices=FORMA_PAGAMENTO)
-    status = models.CharField(max_length=20, default="pendente")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pendente")
     comprovante = models.ImageField(upload_to="comprovantes/", null=True, blank=True)
     cliente = models.ForeignKey(Cliente, null=True, blank=True, on_delete=models.SET_NULL)
     fornecedor = models.ForeignKey(Fornecedor, null=True, blank=True, on_delete=models.SET_NULL)
     tipo_despesa = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Campos de auditoria
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.tipo} - {self.descricao} - R$ {self.valor}"
 
+    class Meta:
+        ordering = ['-vencimento']
+        indexes = [
+            models.Index(fields=['tipo', 'status']),
+            models.Index(fields=['vencimento']),
+        ]
+
+# Modelo proxy para Contas a Receber
+class ContaReceber(ContaFinanceira):
+    class Meta:
+        proxy = True
+        verbose_name = "Conta a Receber"
+        verbose_name_plural = "Contas a Receber"
+    
+    def save(self, *args, **kwargs):
+        self.tipo = "receber"
+        super().save(*args, **kwargs)
+
+# Modelo proxy para Contas a Pagar  
+class ContaPagar(ContaFinanceira):
+    class Meta:
+        proxy = True
+        verbose_name = "Conta a Pagar"
+        verbose_name_plural = "Contas a Pagar"
+    
+    def save(self, *args, **kwargs):
+        self.tipo = "pagar"
+        super().save(*args, **kwargs)
