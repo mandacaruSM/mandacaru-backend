@@ -1,20 +1,49 @@
-asgiref==3.9.0
-certifi==2025.6.15
-charset-normalizer==3.4.2
-dj-database-url==3.0.1
+# ================================================================
+# CRIAR/ATUALIZAR requirements.txt
+# ================================================================
+
+# Django Core
 Django==5.2.4
-django-cors-headers==4.7.0
-djangorestframework==3.16.0
-gunicorn==23.0.0
-idna==3.10
-packaging==25.0
-pillow==11.3.0
-psycopg2-binary==2.9.10
-pytesseract==0.3.13
+djangorestframework==3.15.1
+django-cors-headers==4.3.0
+django-filter==23.2
+
+# Database
+dj-database-url==2.1.0
+psycopg2-binary==2.9.7
+
+# Static Files
+whitenoise==6.5.0
+
+# Authentication & Security
+djangorestframework-simplejwt==5.3.0
+
+# Tasks & Background Jobs
+celery==5.3.1
+redis==4.6.0
+
+# Images & QR Codes
+Pillow==10.0.0
+qrcode[pil]==7.4.2
+
+# Environment Variables
 python-decouple==3.8
-requests==2.32.4
-sqlparse==0.5.3
-typing_extensions==4.14.1
-tzdata==2025.2
-urllib3==2.5.0
-whitenoise==6.9.0
+
+# Production Server
+gunicorn==21.2.0
+
+# Development Tools
+django-debug-toolbar==4.2.0
+django-extensions==3.2.3
+
+# Date & Time
+python-dateutil==2.8.2
+
+# API Documentation (Optional)
+drf-yasg==1.21.7
+
+# Excel Files (Optional)
+openpyxl==3.1.2
+
+# PDF Generation (Optional)
+reportlab==4.0.4

@@ -1,386 +1,973 @@
-# backend/apps/bot_telegram/views.py
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.utils.decorators import method_decorator
-from django.views import View
-from django.shortcuts import get_object_or_404
-import json
-import logging
-from datetime import datetime
+# ================================================================
+# CORRIGIR backend/apps/nr12_checklist/models.py
+# ================================================================
+
+from django.db import models
+from django.contrib.auth import get_user_model
 from django.utils import timezone
-from apps.equipamentos.models import Equipamento
-from apps.nr12_checklist.models import (
-    ChecklistNR12, 
-    ItemChecklistPadrao, 
-    ItemChecklistRealizado,
-    AlertaManutencao
-)
+from datetime import date, timedelta
+import uuid
 
-logger = logging.getLogger(__name__)
-
-@require_http_methods(["GET"])
-def qr_code_endpoint(request, uuid_checklist):
-    """
-    GET /api/qr/{uuid} - Endpoint que o QR Code chama
-    Usa o UUID do checklist para retornar dados
-    """
-    try:
-        logger.info(f"📱 QR Code acessado: {uuid_checklist}")
-        
-        # Buscar checklist pelo UUID
-        try:
-            checklist = ChecklistNR12.objects.get(uuid=uuid_checklist)
-        except ChecklistNR12.DoesNotExist:
-            logger.warning(f"❌ Checklist não encontrado: {uuid_checklist}")
-            return JsonResponse({
-                'error': 'Checklist não encontrado',
-                'uuid': uuid_checklist
-            }, status=404)
-        
-        # Verificar se checklist está pendente ou em andamento
-        if checklist.status not in ['PENDENTE', 'EM_ANDAMENTO']:
-            return JsonResponse({
-                'error': f'Checklist já está {checklist.status.lower()}',
-                'status': checklist.status
-            }, status=400)
-        
-        # Buscar itens padrão do tipo de equipamento
-        if not hasattr(checklist.equipamento, 'tipo_nr12') or not checklist.equipamento.tipo_nr12:
-            return JsonResponse({
-                'error': 'Equipamento não possui tipo NR12 configurado',
-                'equipment': checklist.equipamento.nome
-            }, status=404)
-        
-        itens_padrao = ItemChecklistPadrao.objects.filter(
-            tipo_equipamento=checklist.equipamento.tipo_nr12,
-            ativo=True
-        ).order_by('ordem')
-        
-        if not itens_padrao.exists():
-            return JsonResponse({
-                'error': 'Não há itens de checklist configurados para este tipo de equipamento',
-                'equipment_type': checklist.equipamento.tipo_nr12.nome
-            }, status=404)
-        
-        # Montar estrutura para o bot
-        items_data = []
-        for item in itens_padrao:
-            items_data.append({
-                'description': f"{item.item} - {item.descricao}" if item.descricao else item.item,
-                'reference_image': None  # Adicione se tiver campo de imagem
-            })
-        
-        response_data = {
-            'equipment': {
-                'id': checklist.equipamento.id,
-                'name': checklist.equipamento.nome,
-                'code': checklist.equipamento.codigo if hasattr(checklist.equipamento, 'codigo') else str(checklist.equipamento.id),
-                'location': getattr(checklist.equipamento, 'localizacao', 'Não informado')
-            },
-            'checklist': {
-                'id': checklist.id,
-                'uuid': str(checklist.uuid),
-                'name': f"Checklist NR12 - {checklist.data_checklist} - {checklist.turno}",
-                'items': items_data
-            },
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        logger.info(f"✅ Dados enviados - Equipamento: {checklist.equipamento.nome}, Itens: {len(items_data)}")
-        return JsonResponse(response_data)
-        
-    except Exception as e:
-        logger.error(f"❌ Erro no endpoint QR: {str(e)}")
-        return JsonResponse({
-            'error': 'Erro interno do servidor',
-            'message': str(e)
-        }, status=500)
+User = get_user_model()
 
 
-@method_decorator(csrf_exempt, name='dispatch')
-class ChecklistSubmitView(View):
-    """
-    POST /api/checklist/submit - Recebe dados do checklist do bot
-    """
+class TipoEquipamentoNR12(models.Model):
+    """Tipos de equipamentos para categorização NR12"""
     
-    def post(self, request):
-        try:
-            # Parse do JSON
-            dados = json.loads(request.body)
-            
-            logger.info(f"📊 Checklist recebido do bot: {dados.get('checklist', {}).get('uuid', 'N/A')}")
-            
-            # Validar dados obrigatórios
-            checklist_uuid = dados.get('checklist', {}).get('uuid')
-            if not checklist_uuid:
-                return JsonResponse({
-                    'error': 'UUID do checklist não fornecido',
-                    'required': 'checklist.uuid'
-                }, status=400)
-            
-            # Buscar checklist
-            try:
-                checklist = ChecklistNR12.objects.get(uuid=checklist_uuid)
-            except ChecklistNR12.DoesNotExist:
-                return JsonResponse({
-                    'error': 'Checklist não encontrado',
-                    'uuid': checklist_uuid
-                }, status=404)
-            
-            # Iniciar checklist se estiver pendente
-            if checklist.status == 'PENDENTE':
-                checklist.status = 'EM_ANDAMENTO'
-                checklist.data_inicio = timezone.now()
-                checklist.save()
-                
-                # Criar itens baseados no padrão
-                itens_padrao = ItemChecklistPadrao.objects.filter(
-                    tipo_equipamento=checklist.equipamento.tipo_nr12,
-                    ativo=True
-                ).order_by('ordem')
-                
-                for item_padrao in itens_padrao:
-                    ItemChecklistRealizado.objects.get_or_create(
-                        checklist=checklist,
-                        item_padrao=item_padrao,
-                        defaults={'status': 'PENDENTE'}
-                    )
-            
-            # Processar respostas
-            respostas_processadas = 0
-            fotos_processadas = 0
-            alertas_criados = 0
-            
-            if dados.get('responses'):
-                for i, response in enumerate(dados['responses']):
-                    try:
-                        # Buscar item correspondente
-                        item_realizado = ItemChecklistRealizado.objects.filter(
-                            checklist=checklist
-                        ).order_by('item_padrao__ordem')[i]
-                        
-                        # Mapear status
-                        status_map = {
-                            'ok': 'OK',
-                            'nok': 'NOK', 
-                            'skip': 'NA'
-                        }
-                        
-                        status_django = status_map.get(response['status'], 'PENDENTE')
-                        
-                        # Atualizar item
-                        item_realizado.status = status_django
-                        item_realizado.verificado_em = timezone.now()
-                        item_realizado.save()
-                        
-                        respostas_processadas += 1
-                        
-                        # Criar alerta se NOK e criticidade alta
-                        if status_django == 'NOK' and item_realizado.item_padrao.criticidade in ['ALTA', 'CRITICA']:
-                            AlertaManutencao.objects.create(
-                                equipamento=checklist.equipamento,
-                                tipo='CORRETIVA',
-                                titulo=f"Item não conforme: {item_realizado.item_padrao.item}",
-                                descricao=f"Item '{item_realizado.item_padrao.item}' marcado como não conforme no checklist via bot.",
-                                criticidade=item_realizado.item_padrao.criticidade,
-                                data_prevista=timezone.now().date(),
-                                checklist_origem=checklist
-                            )
-                            alertas_criados += 1
-                        
-                    except IndexError:
-                        logger.warning(f"Item {i} não encontrado no checklist")
-                        continue
-                    except Exception as e:
-                        logger.error(f"Erro ao processar resposta {i}: {str(e)}")
-                        continue
-            
-            # Processar fotos (salvar base64 como observação por enquanto)
-            if dados.get('photos'):
-                for photo in dados['photos']:
-                    try:
-                        item_index = photo.get('item_index', 0)
-                        item_realizado = ItemChecklistRealizado.objects.filter(
-                            checklist=checklist
-                        ).order_by('item_padrao__ordem')[item_index]
-                        
-                        # Adicionar foto como observação (você pode melhorar isso depois)
-                        observacao_foto = f"Foto capturada via bot - {photo.get('caption', 'Sem legenda')}"
-                        if item_realizado.observacao:
-                            item_realizado.observacao += f"\n{observacao_foto}"
-                        else:
-                            item_realizado.observacao = observacao_foto
-                        
-                        item_realizado.save()
-                        fotos_processadas += 1
-                        
-                    except Exception as e:
-                        logger.error(f"Erro ao processar foto: {str(e)}")
-                        continue
-            
-            # Finalizar checklist
-            checklist.status = 'CONCLUIDO'
-            checklist.data_conclusao = timezone.now()
-            
-            # Verificar se necessita manutenção
-            itens_nok = checklist.itens.filter(status='NOK').count()
-            checklist.necessita_manutencao = itens_nok > 0
-            
-            # Adicionar observações se houver
-            if dados.get('observations'):
-                checklist.observacoes = dados['observations']
-            
-            checklist.save()
-            
-            logger.info(f"✅ Checklist finalizado - ID: {checklist.id}, Respostas: {respostas_processadas}, Fotos: {fotos_processadas}")
-            
-            # Resposta para o bot
-            return JsonResponse({
-                'success': True,
-                'checklist_id': checklist.id,
-                'message': 'Checklist salvo com sucesso!',
-                'statistics': {
-                    'total_items': respostas_processadas,
-                    'ok_items': checklist.itens.filter(status='OK').count(),
-                    'nok_items': checklist.itens.filter(status='NOK').count(),
-                    'skipped_items': checklist.itens.filter(status='NA').count()
-                },
-                'alerts_created': alertas_criados,
-                'photos_processed': fotos_processadas,
-                'needs_maintenance': checklist.necessita_manutencao
-            })
-            
-        except json.JSONDecodeError:
-            return JsonResponse({
-                'error': 'JSON inválido'
-            }, status=400)
-            
-        except Exception as e:
-            logger.error(f"❌ Erro ao salvar checklist: {str(e)}")
-            return JsonResponse({
-                'error': 'Erro ao salvar checklist',
-                'message': str(e)
-            }, status=500)
+    nome = models.CharField(
+        max_length=100, 
+        unique=True, 
+        verbose_name="Nome"
+    )
+    descricao = models.TextField(
+        blank=True, 
+        verbose_name="Descrição"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, 
+        verbose_name="Criado em"
+    )
+    
+    class Meta:
+        ordering = ['nome']
+        verbose_name = 'Tipo de Equipamento NR12'
+        verbose_name_plural = 'Tipos de Equipamentos NR12'
+    
+    def __str__(self):
+        return self.nome
 
 
-@require_http_methods(["GET"])
-def checklist_list(request):
-    """
-    GET /api/checklist - Listar checklists executados
-    """
+class ItemChecklistPadrao(models.Model):
+    """Itens padrão de checklist por tipo de equipamento"""
+    
+    CRITICIDADE_CHOICES = [
+        ('BAIXA', 'Baixa'),
+        ('MEDIA', 'Média'),
+        ('ALTA', 'Alta'),
+        ('CRITICA', 'Crítica'),
+    ]
+    
+    tipo_equipamento = models.ForeignKey(
+        TipoEquipamentoNR12,
+        on_delete=models.CASCADE,
+        related_name='itens_checklist',
+        verbose_name="Tipo de Equipamento"
+    )
+    item = models.CharField(
+        max_length=255, 
+        verbose_name="Item"
+    )
+    descricao = models.TextField(
+        blank=True, 
+        verbose_name="Descrição"
+    )
+    criticidade = models.CharField(
+        max_length=10, 
+        choices=CRITICIDADE_CHOICES, 
+        verbose_name="Criticidade"
+    )
+    ordem = models.PositiveIntegerField(
+        default=0, 
+        verbose_name="Ordem"
+    )
+    ativo = models.BooleanField(
+        default=True, 
+        verbose_name="Ativo"
+    )
+    
+    class Meta:
+        ordering = ['ordem', 'item']
+        unique_together = [['tipo_equipamento', 'item']]
+        verbose_name = 'Item de Checklist Padrão'
+        verbose_name_plural = 'Itens de Checklist Padrão'
+    
+    def __str__(self):
+        return f"{self.tipo_equipamento.nome} - {self.item}"
+
+
+class ChecklistNR12(models.Model):
+    """Checklist NR12 para equipamentos"""
+    
+    STATUS_CHOICES = [
+        ('PENDENTE', 'Pendente'),
+        ('EM_ANDAMENTO', 'Em Andamento'),
+        ('CONCLUIDO', 'Concluído'),
+        ('CANCELADO', 'Cancelado'),
+    ]
+    
+    TURNO_CHOICES = [
+        ('MANHA', 'Manhã'),
+        ('TARDE', 'Tarde'),
+        ('NOITE', 'Noite'),
+        ('MADRUGADA', 'Madrugada'),
+    ]
+    
+    # Identificação
+    uuid = models.UUIDField(
+        default=uuid.uuid4, 
+        editable=False, 
+        unique=True
+    )
+    equipamento = models.ForeignKey(
+        'equipamentos.Equipamento',
+        on_delete=models.CASCADE,
+        related_name='checklists_nr12',
+        verbose_name="Equipamento"
+    )
+    
+    # Data e turno
+    data_checklist = models.DateField(
+        verbose_name="Data do Checklist"
+    )
+    turno = models.CharField(
+        max_length=20, 
+        choices=TURNO_CHOICES, 
+        verbose_name="Turno"
+    )
+    
+    # Status e responsável
+    status = models.CharField(
+        max_length=15, 
+        choices=STATUS_CHOICES, 
+        default='PENDENTE',
+        verbose_name="Status"
+    )
+    responsavel = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, 
+        blank=True,
+        related_name='checklists_realizados',
+        verbose_name="Responsável"
+    )
+    
+    # Dados operacionais
+    horimetro_inicial = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        verbose_name="Horímetro Inicial"
+    )
+    horimetro_final = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        verbose_name="Horímetro Final"
+    )
+    
+    # Observações e resultados
+    observacoes = models.TextField(
+        blank=True, 
+        verbose_name="Observações"
+    )
+    necessita_manutencao = models.BooleanField(
+        default=False, 
+        verbose_name="Necessita Manutenção"
+    )
+    
+    # Controle de tempo
+    data_inicio = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Data de Início"
+    )
+    data_conclusao = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Data de Conclusão"
+    )
+    
+    # Auditoria
+    created_at = models.DateTimeField(
+        auto_now_add=True, 
+        verbose_name="Criado em"
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True, 
+        verbose_name="Atualizado em"
+    )
+    
+    class Meta:
+        ordering = ['-data_checklist', '-created_at']
+        unique_together = [['equipamento', 'data_checklist', 'turno']]
+        verbose_name = 'Checklist NR12'
+        verbose_name_plural = 'Checklists NR12'
+    
+    def __str__(self):
+        return f"{self.equipamento.nome} - {self.data_checklist} - {self.turno}"
+    
+    @property
+    def qr_code_url(self):
+        """URL para acesso via QR Code"""
+        return f"/api/bot-telegram/qr/{self.uuid}/"
+    
+    @property
+    def percentual_conclusao(self):
+        """Percentual de conclusão do checklist"""
+        total_itens = self.itens.count()
+        if total_itens == 0:
+            return 0
+        
+        itens_concluidos = self.itens.exclude(status='PENDENTE').count()
+        return round((itens_concluidos / total_itens) * 100, 1)
+    
+    def iniciar_checklist(self, usuario=None):
+        """Inicia o checklist e cria os itens baseados no padrão"""
+        if self.status != 'PENDENTE':
+            raise ValueError("Checklist já foi iniciado ou finalizado")
+        
+        # Atualizar status
+        self.status = 'EM_ANDAMENTO'
+        self.data_inicio = timezone.now()
+        if usuario:
+            self.responsavel = usuario
+        self.save()
+        
+        # Criar itens baseados no tipo NR12 do equipamento
+        if self.equipamento.tipo_nr12:
+            itens_padrao = ItemChecklistPadrao.objects.filter(
+                tipo_equipamento=self.equipamento.tipo_nr12,
+                ativo=True
+            ).order_by('ordem')
+            
+            for item_padrao in itens_padrao:
+                ItemChecklistRealizado.objects.get_or_create(
+                    checklist=self,
+                    item_padrao=item_padrao,
+                    defaults={'status': 'PENDENTE'}
+                )
+    
+    def finalizar_checklist(self):
+        """Finaliza o checklist"""
+        if self.status not in ['EM_ANDAMENTO', 'PENDENTE']:
+            raise ValueError("Checklist não pode ser finalizado")
+        
+        # Verificar se há itens não conformes
+        itens_nok = self.itens.filter(status='NOK').count()
+        self.necessita_manutencao = itens_nok > 0
+        
+        # Atualizar status
+        self.status = 'CONCLUIDO'
+        self.data_conclusao = timezone.now()
+        self.save()
+        
+        # Criar alertas para itens críticos não conformes
+        self._criar_alertas_manutencao()
+    
+    def _criar_alertas_manutencao(self):
+        """Cria alertas de manutenção para itens não conformes críticos"""
+        itens_criticos_nok = self.itens.filter(
+            status='NOK',
+            item_padrao__criticidade__in=['ALTA', 'CRITICA']
+        )
+        
+        for item in itens_criticos_nok:
+            AlertaManutencao.objects.get_or_create(
+                equipamento=self.equipamento,
+                checklist_origem=self,
+                titulo=f"Item não conforme: {item.item_padrao.item}",
+                defaults={
+                    'tipo': 'CORRETIVA',
+                    'descricao': f"Item '{item.item_padrao.item}' marcado como não conforme no checklist de {self.data_checklist}.",
+                    'criticidade': item.item_padrao.criticidade,
+                    'data_prevista': date.today() + timedelta(days=1),
+                }
+            )
+
+
+class ItemChecklistRealizado(models.Model):
+    """Itens realizados de um checklist específico"""
+    
+    STATUS_CHOICES = [
+        ('OK', 'Conforme'),
+        ('NOK', 'Não Conforme'),
+        ('NA', 'Não Aplicável'),
+        ('PENDENTE', 'Pendente'),
+    ]
+    
+    checklist = models.ForeignKey(
+        ChecklistNR12,
+        on_delete=models.CASCADE,
+        related_name='itens',
+        verbose_name="Checklist"
+    )
+    item_padrao = models.ForeignKey(
+        ItemChecklistPadrao,
+        on_delete=models.CASCADE,
+        verbose_name="Item Padrão"
+    )
+    
+    # Status e verificação
+    status = models.CharField(
+        max_length=10, 
+        choices=STATUS_CHOICES, 
+        default='PENDENTE',
+        verbose_name="Status"
+    )
+    observacao = models.TextField(
+        blank=True, 
+        verbose_name="Observação"
+    )
+    
+    # Fotos
+    foto_antes = models.ImageField(
+        upload_to='checklist/fotos/', 
+        null=True, 
+        blank=True,
+        verbose_name="Foto Antes"
+    )
+    foto_depois = models.ImageField(
+        upload_to='checklist/fotos/', 
+        null=True, 
+        blank=True,
+        verbose_name="Foto Depois"
+    )
+    
+    # Controle
+    verificado_em = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Verificado em"
+    )
+    verificado_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, 
+        blank=True,
+        verbose_name="Verificado por"
+    )
+    
+    class Meta:
+        ordering = ['item_padrao__ordem']
+        unique_together = [['checklist', 'item_padrao']]
+        verbose_name = 'Item de Checklist Realizado'
+        verbose_name_plural = 'Itens de Checklist Realizados'
+    
+    def __str__(self):
+        return f"{self.checklist} - {self.item_padrao.item}"
+
+
+class AlertaManutencao(models.Model):
+    """Alertas de manutenção gerados pelos checklists"""
+    
+    TIPO_CHOICES = [
+        ('PREVENTIVA', 'Manutenção Preventiva'),
+        ('CORRETIVA', 'Manutenção Corretiva'),
+        ('URGENTE', 'Manutenção Urgente'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ATIVO', 'Ativo'),
+        ('NOTIFICADO', 'Notificado'),
+        ('RESOLVIDO', 'Resolvido'),
+        ('CANCELADO', 'Cancelado'),
+    ]
+    
+    CRITICIDADE_CHOICES = [
+        ('BAIXA', 'Baixa'),
+        ('MEDIA', 'Média'),
+        ('ALTA', 'Alta'),
+        ('CRITICA', 'Crítica'),
+    ]
+    
+    # Relacionamentos
+    equipamento = models.ForeignKey(
+        'equipamentos.Equipamento',
+        on_delete=models.CASCADE,
+        related_name='alertas_manutencao',
+        verbose_name="Equipamento"
+    )
+    checklist_origem = models.ForeignKey(
+        ChecklistNR12,
+        on_delete=models.SET_NULL,
+        null=True, 
+        blank=True,
+        verbose_name="Checklist de Origem"
+    )
+    
+    # Dados do alerta
+    tipo = models.CharField(
+        max_length=15, 
+        choices=TIPO_CHOICES, 
+        verbose_name="Tipo"
+    )
+    status = models.CharField(
+        max_length=15, 
+        choices=STATUS_CHOICES, 
+        default='ATIVO',
+        verbose_name="Status"
+    )
+    titulo = models.CharField(
+        max_length=200, 
+        verbose_name="Título"
+    )
+    descricao = models.TextField(
+        verbose_name="Descrição"
+    )
+    criticidade = models.CharField(
+        max_length=10, 
+        choices=CRITICIDADE_CHOICES, 
+        verbose_name="Criticidade"
+    )
+    
+    # Datas
+    data_identificacao = models.DateTimeField(
+        auto_now_add=True, 
+        verbose_name="Data de Identificação"
+    )
+    data_prevista = models.DateField(
+        verbose_name="Data Prevista"
+    )
+    data_notificacao = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Data de Notificação"
+    )
+    data_resolucao = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Data de Resolução"
+    )
+    
+    # Auditoria
+    created_at = models.DateTimeField(
+        auto_now_add=True, 
+        verbose_name="Criado em"
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True, 
+        verbose_name="Atualizado em"
+    )
+    
+    class Meta:
+        ordering = ['-data_prevista', '-criticidade']
+        verbose_name = 'Alerta de Manutenção'
+        verbose_name_plural = 'Alertas de Manutenção'
+    
+    def __str__(self):
+        return f"{self.equipamento.nome} - {self.titulo}"
+    
+    @property
+    def dias_restantes(self):
+        """Dias restantes até a data prevista"""
+        return (self.data_prevista - date.today()).days
+    
+    @property
+    def is_urgente(self):
+        """Verifica se o alerta é urgente (vence em até 3 dias)"""
+        return self.dias_restantes <= 3
+    
+    @property
+    def is_vencido(self):
+        """Verifica se o alerta está vencido"""
+        return self.data_prevista < date.today()
+    
+    def marcar_como_notificado(self):
+        """Marca o alerta como notificado"""
+        self.status = 'NOTIFICADO'
+        self.data_notificacao = timezone.now()
+        self.save()
+    
+    def marcar_como_resolvido(self):
+        """Marca o alerta como resolvido"""
+        self.status = 'RESOLVIDO'
+        self.data_resolucao = timezone.now()
+        self.save()
+
+
+class Abastecimento(models.Model):
+    """Registro de abastecimentos dos equipamentos"""
+    
+    TIPO_COMBUSTIVEL_CHOICES = [
+        ('DIESEL', 'Diesel'),
+        ('GASOLINA', 'Gasolina'),
+        ('ETANOL', 'Etanol'),
+        ('GNV', 'GNV'),
+        ('ELETRICO', 'Elétrico'),
+    ]
+    
+    equipamento = models.ForeignKey(
+        'equipamentos.Equipamento',
+        on_delete=models.CASCADE,
+        related_name='abastecimentos',
+        verbose_name="Equipamento"
+    )
+    
+    # Dados do abastecimento
+    data_abastecimento = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Data do Abastecimento"
+    )
+    tipo_combustivel = models.CharField(
+        max_length=20,
+        choices=TIPO_COMBUSTIVEL_CHOICES,
+        verbose_name="Tipo de Combustível"
+    )
+    quantidade_litros = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        verbose_name="Quantidade (Litros)"
+    )
+    valor_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Valor Total (R$)"
+    )
+    valor_por_litro = models.DecimalField(
+        max_digits=8,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        verbose_name="Valor por Litro (R$)"
+    )
+    
+    # Horímetro no momento do abastecimento
+    horimetro = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Horímetro"
+    )
+    
+    # Local e responsável
+    local_abastecimento = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Local do Abastecimento"
+    )
+    posto_fornecedor = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Posto/Fornecedor"
+    )
+    responsavel = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Responsável"
+    )
+    
+    # Observações
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name="Observações"
+    )
+    
+    # Comprovante
+    foto_comprovante = models.ImageField(
+        upload_to='abastecimentos/comprovantes/',
+        null=True,
+        blank=True,
+        verbose_name="Foto do Comprovante"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-data_abastecimento']
+        verbose_name = 'Abastecimento'
+        verbose_name_plural = 'Abastecimentos'
+    
+    def __str__(self):
+        return f"{self.equipamento.nome} - {self.data_abastecimento.strftime('%d/%m/%Y %H:%M')} - {self.quantidade_litros}L"
+    
+    @property
+    def valor_por_litro_calculado(self):
+        """Calcula valor por litro se não informado"""
+        if self.valor_por_litro:
+            return self.valor_por_litro
+        elif self.valor_total and self.quantidade_litros:
+            return self.valor_total / self.quantidade_litros
+        return None
+
+
+class Anomalia(models.Model):
+    """Registro de anomalias encontradas nos equipamentos"""
+    
+    TIPO_CHOICES = [
+        ('MECANICA', 'Mecânica'),
+        ('ELETRICA', 'Elétrica'),
+        ('HIDRAULICA', 'Hidráulica'),
+        ('PNEUMATICA', 'Pneumática'),
+        ('ESTRUTURAL', 'Estrutural'),
+        ('SEGURANCA', 'Segurança'),
+        ('OPERACIONAL', 'Operacional'),
+        ('OUTRAS', 'Outras'),
+    ]
+    
+    SEVERIDADE_CHOICES = [
+        ('BAIXA', 'Baixa'),
+        ('MEDIA', 'Média'),
+        ('ALTA', 'Alta'),
+        ('CRITICA', 'Crítica - Parar Operação'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ABERTA', 'Aberta'),
+        ('EM_ANALISE', 'Em Análise'),
+        ('EM_REPARO', 'Em Reparo'),
+        ('AGUARDANDO_PECA', 'Aguardando Peça'),
+        ('RESOLVIDA', 'Resolvida'),
+        ('CANCELADA', 'Cancelada'),
+    ]
+    
+    # Identificação
+    numero_anomalia = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name="Número da Anomalia"
+    )
+    equipamento = models.ForeignKey(
+        'equipamentos.Equipamento',
+        on_delete=models.CASCADE,
+        related_name='anomalias',
+        verbose_name="Equipamento"
+    )
+    
+    # Dados da anomalia
+    data_identificacao = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Data de Identificação"
+    )
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_CHOICES,
+        verbose_name="Tipo"
+    )
+    severidade = models.CharField(
+        max_length=10,
+        choices=SEVERIDADE_CHOICES,
+        verbose_name="Severidade"
+    )
+    titulo = models.CharField(
+        max_length=200,
+        verbose_name="Título"
+    )
+    descricao = models.TextField(
+        verbose_name="Descrição"
+    )
+    
+    # Localização no equipamento
+    componente_afetado = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Componente Afetado"
+    )
+    
+    # Horímetro quando detectada
+    horimetro_deteccao = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Horímetro na Detecção"
+    )
+    
+    # Status e resolução
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='ABERTA',
+        verbose_name="Status"
+    )
+    data_resolucao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Data de Resolução"
+    )
+    solucao_aplicada = models.TextField(
+        blank=True,
+        verbose_name="Solução Aplicada"
+    )
+    
+    # Responsáveis
+    identificado_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='anomalias_identificadas',
+        verbose_name="Identificado por"
+    )
+    responsavel_reparo = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='anomalias_reparadas',
+        verbose_name="Responsável pelo Reparo"
+    )
+    
+    # Evidências
+    foto_anomalia = models.ImageField(
+        upload_to='anomalias/fotos/',
+        null=True,
+        blank=True,
+        verbose_name="Foto da Anomalia"
+    )
+    foto_reparo = models.ImageField(
+        upload_to='anomalias/reparos/',
+        null=True,
+        blank=True,
+        verbose_name="Foto do Reparo"
+    )
+    
+    # Custos
+    custo_estimado = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Custo Estimado (R$)"
+    )
+    custo_real = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Custo Real (R$)"
+    )
+    
+    # Relacionamento com checklist
+    checklist_origem = models.ForeignKey(
+        'ChecklistNR12',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Checklist de Origem"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-data_identificacao']
+        verbose_name = 'Anomalia'
+        verbose_name_plural = 'Anomalias'
+    
+    def save(self, *args, **kwargs):
+        if not self.numero_anomalia:
+            # Gerar número sequencial
+            ultimo_numero = Anomalia.objects.filter(
+                numero_anomalia__startswith=f"ANO{date.today().year}"
+            ).count()
+            self.numero_anomalia = f"ANO{date.today().year}{ultimo_numero + 1:04d}"
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.numero_anomalia} - {self.equipamento.nome} - {self.titulo}"
+    
+    @property
+    def dias_em_aberto(self):
+        """Calcula dias que a anomalia está em aberto"""
+        if self.status in ['RESOLVIDA', 'CANCELADA']:
+            return 0
+        return (timezone.now().date() - self.data_identificacao.date()).days
+    
+    @property
+    def is_critica(self):
+        """Verifica se é anomalia crítica"""
+        return self.severidade == 'CRITICA'
+
+
+class HistoricoHorimetro(models.Model):
+    """Histórico de atualizações do horímetro"""
+    
+    equipamento = models.ForeignKey(
+        'equipamentos.Equipamento',
+        on_delete=models.CASCADE,
+        related_name='historico_horimetro',
+        verbose_name="Equipamento"
+    )
+    
+    data_registro = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Data do Registro"
+    )
+    horimetro_anterior = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Horímetro Anterior"
+    )
+    horimetro_atual = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Horímetro Atual"
+    )
+    horas_trabalhadas = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        verbose_name="Horas Trabalhadas"
+    )
+    
+    # Origem da atualização
+    origem = models.CharField(
+        max_length=50,
+        choices=[
+            ('CHECKLIST', 'Checklist NR12'),
+            ('ABASTECIMENTO', 'Abastecimento'),
+            ('ANOMALIA', 'Registro de Anomalia'),
+            ('MANUTENCAO', 'Manutenção'),
+            ('MANUAL', 'Atualização Manual'),
+        ],
+        verbose_name="Origem"
+    )
+    
+    responsavel = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Responsável"
+    )
+    
+    observacoes = models.TextField(
+        blank=True,
+        verbose_name="Observações"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-data_registro']
+        verbose_name = 'Histórico de Horímetro'
+        verbose_name_plural = 'Histórico de Horímetros'
+    
+    def __str__(self):
+        return f"{self.equipamento.nome} - {self.data_registro.strftime('%d/%m/%Y %H:%M')} - {self.horimetro_atual}h"
+
+
+# ================================================================
+# FUNÇÃO PARA CRIAR TIPOS E ITENS NR12 AUTOMATICAMENTE
+# ================================================================
+
+def criar_tipos_nr12_mandacaru():
+    """Cria tipos de equipamentos e itens NR12 padrão"""
+    
+    # Escavadeiras
+    escavadeira, created = TipoEquipamentoNR12.objects.get_or_create(
+        nome="Escavadeira Hidráulica",
+        defaults={'descricao': 'Escavadeiras hidráulicas sobre esteiras ou pneus'}
+    )
+    
+    if created:
+        itens_escavadeira = [
+            ("Verificar funcionamento dos controles", "Testar todos os joysticks e comandos", "CRITICA", 1),
+            ("Inspeção visual dos cilindros hidráulicos", "Verificar vazamentos e danos", "ALTA", 2),
+            ("Verificar nível do óleo hidráulico", "Conferir nível e cor do óleo", "ALTA", 3),
+            ("Testar freio de estacionamento", "Verificar se trava corretamente", "CRITICA", 4),
+            ("Inspeção das esteiras/pneus", "Verificar desgaste e danos", "MEDIA", 5),
+            ("Verificar alarme de ré", "Testar funcionamento do alarme sonoro", "ALTA", 6),
+            ("Inspeção da cabine e ROPS", "Verificar integridade estrutural", "CRITICA", 7),
+            ("Verificar luzes e sinalização", "Testar faróis, lanternas e giroflex", "MEDIA", 8),
+            ("Inspeção geral da máquina", "Verificar fixações, soldas e componentes", "MEDIA", 9),
+        ]
+        
+        for item, desc, crit, ordem in itens_escavadeira:
+            ItemChecklistPadrao.objects.create(
+                tipo_equipamento=escavadeira,
+                item=item,
+                descricao=desc,
+                criticidade=crit,
+                ordem=ordem
+            )
+    
+    # Retroescavadeiras
+    retro, created = TipoEquipamentoNR12.objects.get_or_create(
+        nome="Retroescavadeira",
+        defaults={'descricao': 'Retroescavadeiras com carregadeira frontal'}
+    )
+    
+    if created:
+        itens_retro = [
+            ("Verificar funcionamento dos pedais", "Testar freio, acelerador e embreagem", "CRITICA", 1),
+            ("Inspeção do sistema hidráulico", "Verificar pressão e vazamentos", "ALTA", 2),
+            ("Testar comando da lança traseira", "Verificar movimentos de escavação", "ALTA", 3),
+            ("Verificar pa carregadeira frontal", "Testar levantamento e inclinação", "ALTA", 4),
+            ("Inspeção dos pneus", "Verificar calibragem e desgaste", "MEDIA", 5),
+            ("Verificar direção e suspensão", "Testar alinhamento e amortecimento", "ALTA", 6),
+            ("Testar alarme de ré", "Verificar funcionamento", "ALTA", 7),
+            ("Inspeção da cabine", "Verificar cintos e estrutura", "CRITICA", 8),
+        ]
+        
+        for item, desc, crit, ordem in itens_retro:
+            ItemChecklistPadrao.objects.create(
+                tipo_equipamento=retro,
+                item=item,
+                descricao=desc,
+                criticidade=crit,
+                ordem=ordem
+            )
+    
+    # Carregadeiras
+    carregadeira, created = TipoEquipamentoNR12.objects.get_or_create(
+        nome="Carregadeira de Rodas",
+        defaults={'descricao': 'Carregadeiras frontais sobre pneus'}
+    )
+    
+    if created:
+        itens_carregadeira = [
+            ("Verificar sistema de frenagem", "Testar freio de serviço e estacionamento", "CRITICA", 1),
+            ("Inspeção da caçamba", "Verificar soldas e desgaste", "ALTA", 2),
+            ("Testar sistema hidráulico", "Verificar pressão e temperatura", "ALTA", 3),
+            ("Verificar pneus e pressão", "Conferir calibragem e desgaste", "MEDIA", 4),
+            ("Inspeção do motor", "Verificar níveis e vazamentos", "ALTA", 5),
+            ("Testar direção", "Verificar folgas e alinhamento", "ALTA", 6),
+            ("Verificar iluminação", "Testar faróis de trabalho", "MEDIA", 7),
+            ("Inspeção da cabine ROPS", "Verificar estrutura de proteção", "CRITICA", 8),
+        ]
+        
+        for item, desc, crit, ordem in itens_carregadeira:
+            ItemChecklistPadrao.objects.create(
+                tipo_equipamento=carregadeira,
+                item=item,
+                descricao=desc,
+                criticidade=crit,
+                ordem=ordem
+            )
+    
+    print("✅ Tipos NR12 e itens de checklist criados com sucesso!")
+
+
+# ================================================================
+# FUNÇÃO AUXILIAR PARA DASHBOARD
+# ================================================================
+
+def obter_estatisticas_nr12():
+    """Retorna estatísticas dos checklists NR12 para dashboard"""
+    hoje = date.today()
+    
+    stats = {
+        'checklists_hoje': {
+            'total': ChecklistNR12.objects.filter(data_checklist=hoje).count(),
+            'pendentes': ChecklistNR12.objects.filter(data_checklist=hoje, status='PENDENTE').count(),
+            'concluidos': ChecklistNR12.objects.filter(data_checklist=hoje, status='CONCLUIDO').count(),
+            'com_problemas': ChecklistNR12.objects.filter(
+                data_checklist=hoje, 
+                status='CONCLUIDO', 
+                necessita_manutencao=True
+            ).count(),
+        },
+        'alertas_ativos': AlertaManutencao.objects.filter(status__in=['ATIVO', 'NOTIFICADO']).count(),
+        'alertas_criticos': AlertaManutencao.objects.filter(
+            status__in=['ATIVO', 'NOTIFICADO'], 
+            criticidade='CRITICA'
+        ).count(),
+        'equipamentos_nr12_ativos': None,  # Será calculado se necessário
+    }
+    
+    # Calcular equipamentos NR12 ativos se necessário
     try:
-        # Filtros opcionais
-        equipment_id = request.GET.get('equipment_id')
-        date = request.GET.get('date')
-        status = request.GET.get('status')
-        
-        checklists = ChecklistNR12.objects.select_related('equipamento').prefetch_related('itens')
-        
-        if equipment_id:
-            checklists = checklists.filter(equipamento_id=equipment_id)
-        
-        if date:
-            checklists = checklists.filter(data_checklist=date)
-            
-        if status:
-            checklists = checklists.filter(status=status)
-        
-        # Ordenar por mais recente
-        checklists = checklists.order_by('-data_checklist', '-created_at')[:50]
-        
-        # Serializar dados
-        dados = []
-        for checklist in checklists:
-            dados.append({
-                'id': checklist.id,
-                'uuid': str(checklist.uuid),
-                'equipment': {
-                    'id': checklist.equipamento.id,
-                    'name': checklist.equipamento.nome,
-                    'code': getattr(checklist.equipamento, 'codigo', str(checklist.equipamento.id))
-                },
-                'data_checklist': checklist.data_checklist.isoformat(),
-                'turno': checklist.turno,
-                'status': checklist.status,
-                'percentual_conclusao': checklist.percentual_conclusao,
-                'necessita_manutencao': checklist.necessita_manutencao,
-                'statistics': {
-                    'total_items': checklist.itens.count(),
-                    'ok_items': checklist.itens.filter(status='OK').count(),
-                    'nok_items': checklist.itens.filter(status='NOK').count(),
-                    'na_items': checklist.itens.filter(status='NA').count(),
-                    'pending_items': checklist.itens.filter(status='PENDENTE').count()
-                },
-                'data_inicio': checklist.data_inicio.isoformat() if checklist.data_inicio else None,
-                'data_conclusao': checklist.data_conclusao.isoformat() if checklist.data_conclusao else None,
-                'created_at': checklist.created_at.isoformat()
-            })
-        
-        return JsonResponse({
-            'total': len(dados),
-            'checklists': dados
-        })
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao listar checklists: {str(e)}")
-        return JsonResponse({
-            'error': 'Erro ao buscar checklists',
-            'message': str(e)
-        }, status=500)
-
-
-@require_http_methods(["GET"])
-def checklist_detail(request, uuid_checklist):
-    """
-    GET /api/checklist/{uuid} - Detalhes de um checklist específico
-    """
-    try:
-        checklist = get_object_or_404(ChecklistNR12, uuid=uuid_checklist)
-        
-        # Serializar itens
-        itens_data = []
-        for item in checklist.itens.select_related('item_padrao').order_by('item_padrao__ordem'):
-            itens_data.append({
-                'id': item.id,
-                'item': item.item_padrao.item,
-                'descricao': item.item_padrao.descricao,
-                'criticidade': item.item_padrao.criticidade,
-                'status': item.status,
-                'observacao': item.observacao,
-                'verificado_em': item.verificado_em.isoformat() if item.verificado_em else None,
-                'verificado_por': item.verificado_por.nome if item.verificado_por else None
-            })
-        
-        dados = {
-            'id': checklist.id,
-            'uuid': str(checklist.uuid),
-            'equipment': {
-                'id': checklist.equipamento.id,
-                'name': checklist.equipamento.nome,
-                'code': getattr(checklist.equipamento, 'codigo', str(checklist.equipamento.id)),
-                'tipo_nr12': checklist.equipamento.tipo_nr12.nome if checklist.equipamento.tipo_nr12 else None
-            },
-            'data_checklist': checklist.data_checklist.isoformat(),
-            'turno': checklist.turno,
-            'status': checklist.status,
-            'horimetro_inicial': float(checklist.horimetro_inicial) if checklist.horimetro_inicial else None,
-            'horimetro_final': float(checklist.horimetro_final) if checklist.horimetro_final else None,
-            'observacoes': checklist.observacoes,
-            'necessita_manutencao': checklist.necessita_manutencao,
-            'percentual_conclusao': checklist.percentual_conclusao,
-            'responsavel': checklist.responsavel.nome if checklist.responsavel else None,
-            'data_inicio': checklist.data_inicio.isoformat() if checklist.data_inicio else None,
-            'data_conclusao': checklist.data_conclusao.isoformat() if checklist.data_conclusao else None,
-            'itens': itens_data,
-            'qr_code_url': checklist.qr_code_url
-        }
-        
-        return JsonResponse(dados)
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao buscar checklist: {str(e)}")
-        return JsonResponse({
-            'error': 'Erro ao buscar checklist',
-            'message': str(e)
-        }, status=500)
+        from backend.apps.equipamentos.models import Equipamento
+        stats['equipamentos_nr12_ativos'] = Equipamento.objects.filter(ativo_nr12=True).count()
+    except:
+        pass
+    
+    return stats

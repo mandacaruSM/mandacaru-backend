@@ -1,5 +1,5 @@
 # ================================================================
-# 1. ATUALIZAR backend/settings.py
+# ATUALIZAR backend/settings.py - ADICIONAR dashboard
 # ================================================================
 
 from pathlib import Path
@@ -7,11 +7,10 @@ from decouple import config
 import os
 import dj_database_url
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY', default='unsafe-secret-key')
-DEBUG = config('DEBUG', default=False, cast=bool)
+DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='127.0.0.1,localhost').split(',')
 
 INSTALLED_APPS = [
@@ -25,6 +24,7 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'corsheaders',
+    'django_filters',
 
     # Apps existentes
     'backend.apps.clientes',
@@ -39,12 +39,13 @@ INSTALLED_APPS = [
     'backend.apps.relatorios',
     'backend.apps.core',
     
-    # ✅ NOVOS APPS
+    # ✅ NOVOS APPS - ADICIONANDO dashboard
     'rest_framework.authtoken',
     'backend.apps.auth_cliente',
     'backend.apps.nr12_checklist',
     'backend.apps.cliente_portal',
     'backend.apps.bot_telegram',
+    'backend.apps.dashboard',  # ✅ ADICIONAR ESTA LINHA
 ]
 
 MIDDLEWARE = [
@@ -59,7 +60,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# ✅ NOVO: Configuração do Django REST Framework
+# ✅ Configuração do Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
@@ -79,8 +80,8 @@ REST_FRAMEWORK = {
 
 ROOT_URLCONF = 'backend.urls'
 
-# ✅ NOVO: Usar o modelo customizado de usuário
-# AUTH_USER_MODEL = 'auth_cliente.UsuarioCliente'
+# ✅ Usar o modelo customizado de usuário
+AUTH_USER_MODEL = 'auth_cliente.UsuarioCliente'
 
 TEMPLATES = [{
     'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -105,7 +106,6 @@ DATABASES = {
     )
 }
 
-
 AUTH_PASSWORD_VALIDATORS = []
 
 LANGUAGE_CODE = 'pt-br'
@@ -128,24 +128,10 @@ CORS_ALLOWED_ORIGINS = [
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# ✅ NOVO: Configurações do Telegram Bot
+# ✅ Configurações do Telegram Bot
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_WEBHOOK_URL = config('TELEGRAM_WEBHOOK_URL', default='')
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
-    'DEFAULT_FILTER_BACKENDS': [
-        'django_filters.rest_framework.DjangoFilterBackend',
-        'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
-    ],
-}
-AUTH_USER_MODEL = 'auth_cliente.UsuarioCliente'
+# ✅ Configurações do Celery (opcionais por enquanto)
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
