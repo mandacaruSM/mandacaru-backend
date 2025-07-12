@@ -6,10 +6,7 @@ from pathlib import Path
 from decouple import config
 import os
 import dj_database_url
-import django
-print("Apps instalados:")
-for app in django.conf.settings.INSTALLED_APPS:
-    print(f"  - {app}")
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

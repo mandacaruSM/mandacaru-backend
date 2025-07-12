@@ -22,5 +22,5 @@ urlpatterns = [
     path('api/portal/', include('backend.apps.cliente_portal.urls')),
     path('', include('backend.apps.bot_telegram.urls')),  # Endpoints do bot
 ]
-
+''
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

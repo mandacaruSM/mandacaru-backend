@@ -9,8 +9,10 @@ import json
 import logging
 from datetime import datetime
 from django.utils import timezone
-from apps.equipamentos.models import Equipamento
-from apps.nr12_checklist.models import (
+
+# ✅ IMPORTS CORRIGIDOS
+from backend.apps.equipamentos.models import Equipamento
+from backend.apps.nr12_checklist.models import (
     ChecklistNR12, 
     ItemChecklistPadrao, 
     ItemChecklistRealizado,
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 @require_http_methods(["GET"])
 def qr_code_endpoint(request, uuid_checklist):
     """
-    GET /api/qr/{uuid} - Endpoint que o QR Code chama
+    GET /qr/{uuid} - Endpoint que o QR Code chama
     Usa o UUID do checklist para retornar dados
     """
     try:
@@ -75,7 +77,7 @@ def qr_code_endpoint(request, uuid_checklist):
             'equipment': {
                 'id': checklist.equipamento.id,
                 'name': checklist.equipamento.nome,
-                'code': checklist.equipamento.codigo if hasattr(checklist.equipamento, 'codigo') else str(checklist.equipamento.id),
+                'code': getattr(checklist.equipamento, 'codigo', str(checklist.equipamento.id)),
                 'location': getattr(checklist.equipamento, 'localizacao', 'Não informado')
             },
             'checklist': {
@@ -349,7 +351,7 @@ def checklist_detail(request, uuid_checklist):
                 'status': item.status,
                 'observacao': item.observacao,
                 'verificado_em': item.verificado_em.isoformat() if item.verificado_em else None,
-                'verificado_por': item.verificado_por.nome if item.verificado_por else None
+                'verificado_por': item.verificado_por.first_name if item.verificado_por else None
             })
         
         dados = {
@@ -369,7 +371,7 @@ def checklist_detail(request, uuid_checklist):
             'observacoes': checklist.observacoes,
             'necessita_manutencao': checklist.necessita_manutencao,
             'percentual_conclusao': checklist.percentual_conclusao,
-            'responsavel': checklist.responsavel.nome if checklist.responsavel else None,
+            'responsavel': checklist.responsavel.first_name if checklist.responsavel else None,
             'data_inicio': checklist.data_inicio.isoformat() if checklist.data_inicio else None,
             'data_conclusao': checklist.data_conclusao.isoformat() if checklist.data_conclusao else None,
             'itens': itens_data,
