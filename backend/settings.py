@@ -135,3 +135,21 @@ TELEGRAM_WEBHOOK_URL = config('TELEGRAM_WEBHOOK_URL', default='')
 # ✅ Configurações do Celery (opcionais por enquanto)
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+
+# Adicionar ao settings.py:
+
+# Configurações de QR Code
+QR_LOGO_PATH = os.path.join(BASE_DIR, 'static', 'img', 'logo.png')
+QR_DEFAULT_SIZE = 'medium'
+QR_INCLUDE_LOGO = True
+
+# Diretórios de mídia
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Criar diretório de QR codes
+QR_CODES_DIR = os.path.join(MEDIA_ROOT, 'qr_codes')
+QR_LOGO_PATH = os.path.join(BASE_DIR, 'static', 'img', 'logo.png')  # se tiver logo
+QR_DEFAULT_SIZE = 'medium'
+QR_INCLUDE_LOGO = True
+BASE_URL = 'http://localhost:8000'  # ou sua URL de produção
