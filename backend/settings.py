@@ -14,6 +14,7 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='127.0.0.1,localhost').split(',')
 
 INSTALLED_APPS = [
+    # Django apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -22,31 +23,33 @@ INSTALLED_APPS = [
     'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
 
+    # Terceiros
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'django_filters',
 
-    # Apps existentes
+    # Apps internos - personalizados do seu projeto
+    'backend.apps.auth_cliente',
+    'backend.apps.bot_telegram',
+    'backend.apps.cliente_portal',
     'backend.apps.clientes',
-    'backend.apps.fornecedor',
-    'backend.apps.financeiro',
+    'backend.apps.dashboard',
     'backend.apps.equipamentos',
-    'backend.apps.manutencao',
-    'backend.apps.almoxarifado',
     'backend.apps.empreendimentos',
+    'backend.apps.financeiro',
+    'backend.apps.fornecedor',
+    'backend.apps.manutencao',
+    'backend.apps.nr12_checklist',
+    'backend.apps.operadores',
     'backend.apps.ordens_servico',
     'backend.apps.orcamentos',
+    'backend.apps.almoxarifado',
+    'backend.apps.abastecimento',
     'backend.apps.relatorios',
     'backend.apps.core',
-    
-    # ✅ NOVOS APPS - ADICIONANDO dashboard
-    'rest_framework.authtoken',
-    'backend.apps.auth_cliente',
-    'backend.apps.nr12_checklist',
-    'backend.apps.cliente_portal',
-    'backend.apps.bot_telegram',
-    'backend.apps.dashboard',  # ✅ ADICIONAR ESTA LINHA
 ]
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -100,11 +103,16 @@ TEMPLATES = [{
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',
-        conn_max_age=600
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'mandacaru_erp',
+        'USER': 'postgres',
+        'PASSWORD': 'mandacaru',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
 }
+
 
 AUTH_PASSWORD_VALIDATORS = []
 
@@ -127,8 +135,10 @@ CORS_ALLOWED_ORIGINS = [
 # Upload de arquivos
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # ✅ Configurações do Telegram Bot
+TELEGRAM_BOT_USERNAME = config('TELEGRAM_BOT_USERNAME', default='Mandacarusmbot')
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_WEBHOOK_URL = config('TELEGRAM_WEBHOOK_URL', default='')
 

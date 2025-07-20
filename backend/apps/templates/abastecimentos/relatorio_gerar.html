@@ -1,0 +1,18 @@
+<h2>Gerar Relatório de Consumo</h2>
+<form method="post">
+  {% csrf_token %}
+  <label>Equipamento:</label>
+  <select name="equipamento_id" required>
+    {% for eq in equipamentos %}
+      <option value="{{ eq.id }}">{{ eq.nome }}</option>
+    {% endfor %}
+  </select><br><br>
+
+  <label>Data Início:</label>
+  <input type="date" name="data_inicio" required><br><br>
+
+  <label>Data Fim:</label>
+  <input type="date" name="data_fim" required><br><br>
+
+  <button type="submit">Gerar Relatório</button>
+</form>

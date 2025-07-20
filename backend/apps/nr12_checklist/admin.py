@@ -35,11 +35,18 @@ class ItemChecklistPadraoAdmin(admin.ModelAdmin):
 
 @admin.register(ChecklistNR12)
 class ChecklistNR12Admin(admin.ModelAdmin):
-    list_display = ['equipamento', 'data_checklist', 'turno', 'status_colorido', 'responsavel', 'total_itens']
-    list_filter = ['status', 'turno', 'data_checklist', 'necessita_manutencao']
+    list_display = ['equipamento', 'data_checklist', 'turno', 'status_colorido', 'responsavel', 'total_itens', 'link_pdf']
+
     search_fields = ['equipamento__nome', 'observacoes']
     readonly_fields = ['uuid', 'created_at', 'updated_at']
     date_hierarchy = 'data_checklist'
+    
+    def link_pdf(self, obj):
+        return format_html(
+            '<a class="button" href="/api/nr12/checklist/{}/pdf/" target="_blank">📄 Ver PDF</a>',
+            obj.pk
+        )
+    link_pdf.short_description = 'Relatório PDF'    
     
     # TODAS AS AÇÕES INCLUINDO QR CODES
     actions = [
@@ -202,19 +209,22 @@ class ChecklistNR12Admin(admin.ModelAdmin):
 
 @admin.register(ItemChecklistRealizado)
 class ItemChecklistRealizadoAdmin(admin.ModelAdmin):
-    list_display = ['checklist', 'item_padrao', 'status', 'status_colorido', 'verificado_por', 'verificado_em']
+    list_display = [
+        'checklist', 'item_padrao', 'status',
+        'status_colorido', 'verificado_por', 'verificado_em'
+    ]
     list_filter = ['status', 'verificado_em']
     search_fields = ['checklist__equipamento__nome', 'item_padrao__item']
     list_editable = ['status']
-    
+
     actions = ['marcar_como_ok', 'marcar_como_nok', 'marcar_como_na']
-    
+
     def status_colorido(self, obj):
         cores = {
-            'OK': '#28a745',      # Verde
-            'NOK': '#dc3545',     # Vermelho
-            'NA': '#6c757d',      # Cinza
-            'PENDENTE': '#ffc107' # Amarelo
+            'OK': '#28a745',
+            'NOK': '#dc3545',
+            'NA': '#6c757d',
+            'PENDENTE': '#ffc107'
         }
         return format_html(
             '<span style="background: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">{}</span>',

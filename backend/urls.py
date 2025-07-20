@@ -42,9 +42,15 @@ urlpatterns = [
     path('api/', api_root, name='api_root'),
     
     # APIs principais do sistema
+    path('operadores/', include('backend.apps.operadores.urls')),
+    #path('abastecimento/', include('backend.apps.abastecimento.urls')),
     path('api/auth/', include('backend.apps.auth_cliente.urls')),
     path('api/dashboard/', include('backend.apps.dashboard.urls')),
+    # NR12 principal (ViewSets REST)
     path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
+
+    # NR12 - Bot Telegram (acesso via QR Code)
+    path('api/nr12/bot/', include('backend.apps.nr12_checklist.urls_bot')),
     path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
     path('api/clientes/', include('backend.apps.clientes.urls')),
     path('api/empreendimentos/', include('backend.apps.empreendimentos.urls')),
@@ -55,6 +61,8 @@ urlpatterns = [
     path('api/ordens-servico/', include('backend.apps.ordens_servico.urls')),
     path('api/relatorios/', include('backend.apps.relatorios.urls')),
     path('api/fornecedor/', include('backend.apps.fornecedor.urls')),
+    path('api/operadores/', include('backend.apps.operadores.api_urls')),
+
     
     # Portal do cliente
     path('api/portal/', include('backend.apps.cliente_portal.urls')),

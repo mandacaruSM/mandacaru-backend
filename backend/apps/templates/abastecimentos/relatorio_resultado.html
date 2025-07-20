@@ -1,0 +1,12 @@
+{% if relatorio %}
+  <h2>Relatório de Consumo</h2>
+  <p><strong>Equipamento:</strong> {{ relatorio.equipamento }}</p>
+  <p><strong>Período:</strong> {{ relatorio.periodo_inicio }} a {{ relatorio.periodo_fim }}</p>
+  <p><strong>Total de Litros:</strong> {{ relatorio.total_litros }}</p>
+  <p><strong>Total de Valor:</strong> R$ {{ relatorio.total_valor }}</p>
+  <p><strong>Total de Horas:</strong> {{ relatorio.total_horas }}</p>
+  <p><strong>Consumo Médio (L/H):</strong> {{ relatorio.consumo_medio_hora }}</p>
+  <p><strong>Preço Médio (R$/L):</strong> {{ relatorio.preco_medio_litro }}</p>
+{% else %}
+  <p>{{ mensagem }}</p>
+{% endif %}

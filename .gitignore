@@ -1,16 +1,128 @@
-# Ambiente virtual
-.venv/
+# ================================================================
+# .gitignore para Mandacaru ERP Backend
+# ================================================================
 
-# Arquivos Python compilados
+# Django
+*.log
+*.pot
 *.pyc
 __pycache__/
-
-# Banco de dados local
+local_settings.py
 db.sqlite3
+db.sqlite3-journal
 
-# Arquivo de variáveis de ambiente
+# Environment variables
 .env
+.env.local
+.env.production
+.env.staging
 
-# Arquivos do sistema
+# Static files
+/staticfiles/
+/static/
+/media/
+
+# QR Codes gerados
+/media/qr_codes/
+/qr_codes/
+
+# Backups
+/backups/
+*.sql
+*.dump
+
+# Logs
+/logs/
 *.log
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
 *.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Node modules (se houver frontend integrado)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Pytest
+.pytest_cache/
+.cache
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Uploads de usuários
+uploads/
+attachments/
+
+# Certificados SSL
+*.pem
+*.key
+*.crt
+
+# Arquivos de configuração sensíveis
+secrets.json
+config.ini
+
+# Redis dumps
+dump.rdb
+
+# PostgreSQL
+*.pgdump

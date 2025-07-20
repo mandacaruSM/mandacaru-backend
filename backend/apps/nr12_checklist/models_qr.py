@@ -1,4 +1,7 @@
+import os
+import glob
 from django.db import models
+from django.conf import settings
 from .qr_manager import QRCodeManager
 
 class ChecklistQRMixin:
@@ -9,9 +12,6 @@ class ChecklistQRMixin:
         """URL do QR code PNG se existir"""
         qr_manager = QRCodeManager()
         filename = f"checklist_{self.uuid}_*_medium_*.png"
-        
-        import glob
-        import os
         
         pattern = os.path.join(qr_manager.qr_dir, 'checklists', filename)
         files = glob.glob(pattern)
@@ -33,13 +33,13 @@ class ChecklistQRMixin:
         """Verifica se já existe QR code PNG"""
         return self.qr_code_png_url is not None
 
+
 class EquipamentoQRMixin:
     """Mixin para adicionar funcionalidades de QR PNG aos equipamentos"""
     
     @property
     def qr_code_png_url(self):
         """URL do QR code PNG do equipamento"""
-        from django.conf import settings
         filename = f"eq_{self.id}_medium.png"
         filepath = os.path.join(settings.MEDIA_ROOT, 'qr_codes', 'equipamentos', filename)
         
@@ -56,3 +56,16 @@ class EquipamentoQRMixin:
     def tem_qr_png(self):
         """Verifica se já existe QR code PNG"""
         return self.qr_code_png_url is not None
+
+class CategoriaChecklistNR12(models.Model):
+    codigo = models.CharField(max_length=10, unique=True)
+    nome = models.CharField(max_length=100)
+    descricao = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Categoria de Checklist NR12'
+        verbose_name_plural = 'Categorias de Checklist NR12'
+        ordering = ['codigo']
+
+    def __str__(self):
+        return f'{self.codigo} - {self.nome}'

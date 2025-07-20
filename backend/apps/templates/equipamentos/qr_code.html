@@ -1,0 +1,49 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Code - {{ equipamento.nome }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+            text-align: center;
+        }
+        .qr-container {
+            display: inline-block;
+            border: 2px solid #ccc;
+            padding: 1rem;
+            border-radius: 10px;
+        }
+        .qr-container img {
+            max-width: 300px;
+        }
+    .bot-link {
+        display: inline-block;
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        background-color: #25D366;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+    .bot-link:hover {
+        background-color: #128C7E;
+    }
+    </style>
+</head>
+<body>
+    <h1>QR Code do Equipamento</h1>
+    <h2>{{ equipamento.nome }}</h2>
+    <div class="qr-container">
+        {% if equipamento.qr_code_png_url %}
+            <img src="{{ equipamento.qr_code_png_url }}" alt="QR Code do Equipamento">
+        {% else %}
+            <p>QR Code ainda não gerado.</p>
+        {% endif %}
+    </div>
+   <a href="{{ equipamento.bot_link }}" class="bot-link" target="_blank">Abrir no Bot do Telegram</a>
+</body>
+</html>

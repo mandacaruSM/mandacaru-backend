@@ -5,6 +5,8 @@ class Empreendimento(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="empreendimentos")
     nome = models.CharField(max_length=100)
     descricao = models.TextField(blank=True)
+    ativo = models.BooleanField(default=True, verbose_name="Ativo")
+    data_inicio = models.DateField(null=True, blank=True, verbose_name="Data de Início")
     endereco = models.CharField(max_length=200)
     cidade = models.CharField(max_length=100)
     estado = models.CharField(max_length=2)

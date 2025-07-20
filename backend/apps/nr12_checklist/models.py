@@ -37,6 +37,19 @@ class TipoEquipamentoNR12(models.Model):
         return self.nome
 
 
+class FrequenciaChecklist(models.Model):
+    codigo = models.CharField(max_length=20, unique=True)
+    nome = models.CharField(max_length=50)
+
+    class Meta:
+        verbose_name = "Frequência de Checklist"
+        verbose_name_plural = "Frequências de Checklists"
+        ordering = ['codigo']
+
+    def __str__(self):
+        return self.nome
+
+
 class ItemChecklistPadrao(models.Model):
     """Itens padrão de checklist por tipo de equipamento"""
     
@@ -102,6 +115,13 @@ class ChecklistNR12(models.Model):
         ('MADRUGADA', 'Madrugada'),
     ]
     
+    frequencia = models.CharField(
+        max_length=10,
+        choices=[('DIARIA', 'Diária'), ('SEMANAL', 'Semanal'), ('MENSAL', 'Mensal')],
+        default='DIARIA',
+        verbose_name='Frequência do Checklist'
+    )
+
     # Identificação
     uuid = models.UUIDField(
         default=uuid.uuid4, 
@@ -489,11 +509,11 @@ class Abastecimento(models.Model):
     ]
     
     equipamento = models.ForeignKey(
-        'equipamentos.Equipamento',
-        on_delete=models.CASCADE,
-        related_name='abastecimentos',
-        verbose_name="Equipamento"
-    )
+    'equipamentos.Equipamento',
+    on_delete=models.CASCADE,
+    related_name='abastecimentos_checklist',
+    verbose_name="Equipamento"
+)
     
     # Dados do abastecimento
     data_abastecimento = models.DateTimeField(
