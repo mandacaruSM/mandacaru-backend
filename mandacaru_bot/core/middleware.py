@@ -14,6 +14,7 @@ def require_auth(func):
     async def wrapper(message: Message, *args, **kwargs):
         chat_id = str(message.chat.id)
         
+        # Verificar se está autenticado
         if not esta_autenticado(chat_id):
             await message.answer(
                 "🔒 Você precisa estar autenticado para usar este comando.\n\n"
@@ -23,6 +24,12 @@ def require_auth(func):
         
         # Adiciona o operador aos kwargs para facilitar o acesso
         operador = obter_operador(chat_id)
+        if not operador:
+            await message.answer(
+                "❌ Erro de sessão. Digite /start para fazer login novamente."
+            )
+            return
+        
         kwargs['operador'] = operador
         
         return await func(message, *args, **kwargs)

@@ -1,5 +1,5 @@
 # ================================
-# core/config.py (melhorado)
+# core/config.py (versão final corrigida)
 # ================================
 
 import os
@@ -8,6 +8,26 @@ from pathlib import Path
 
 # Carrega variáveis do .env
 env_path = Path(__file__).parent.parent.parent / ".env"
+if not env_path.exists():
+    # Tenta encontrar .env em locais alternativos
+    alternative_paths = [
+        Path(__file__).parent.parent / ".env",
+        Path(".env"),
+        Path(__file__).parent.parent.parent.parent / ".env"
+    ]
+    
+    for alt_path in alternative_paths:
+        if alt_path.exists():
+            env_path = alt_path
+            break
+    else:
+        base_path = Path(__file__).parent.parent.parent / ".env"
+        print(f"⚠️ Arquivo .env não encontrado. Tentou em:")
+        print(f"   • {base_path}")
+        for path in alternative_paths:
+            print(f"   • {path}")
+        print("\n📝 Copie .env.example para .env e configure as variáveis.")
+
 load_dotenv(dotenv_path=env_path)
 
 # Configurações do Telegram - usando as variáveis existentes do Django
@@ -25,7 +45,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Configurações de logging do bot
 LOG_LEVEL = os.getenv("BOT_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO"))
-LOG_FILE = os.getenv("BOT_LOG_FILE", "logs/bot.log")
+LOG_FILE = os.getenv("BOT_LOG_FILE", "bot.log")  # Apenas o nome do arquivo
 
 # Configurações de sessão
 SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "24"))
@@ -80,7 +100,11 @@ def validar_configuracoes():
         raise ValueError(f"Erros de configuração: {', '.join(erros)}")
 
 # Executar validação na importação
-validar_configuracoes()
+try:
+    validar_configuracoes()
+except ValueError as e:
+    print(f"❌ {e}")
+    print("📝 Configure o arquivo .env antes de continuar.")
 
 # Configurações por ambiente
 class Config:

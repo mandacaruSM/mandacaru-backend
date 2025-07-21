@@ -307,22 +307,30 @@ def register_admin_handlers(dp: Dispatcher):
     """Registra handlers administrativos"""
     
     # Verificar se usuário é admin
-    admin_filter = lambda message: message.from_user.id in ADMIN_IDS
+    def admin_filter(message):
+        return message.from_user.id in ADMIN_IDS
+    
+    # Função auxiliar para verificar estado da sessão
+    def check_broadcast_state(message):
+        chat_id = str(message.chat.id)
+        sessao = obter_sessao(chat_id)
+        return sessao.get("estado") == "AGUARDANDO_BROADCAST"
     
     # Comandos principais
-    dp.message.register(admin_menu_handler, Command("admin") & admin_filter)
-    dp.message.register(status_handler, Command("status") & admin_filter)
-    dp.message.register(stats_handler, Command("stats") & admin_filter)
-    dp.message.register(sessions_handler, Command("sessions") & admin_filter)
-    dp.message.register(cleanup_handler, Command("cleanup") & admin_filter)
-    dp.message.register(health_handler, Command("health") & admin_filter)
-    dp.message.register(broadcast_handler, Command("broadcast") & admin_filter)
+    dp.message.register(admin_menu_handler, Command("admin"), admin_filter)
+    dp.message.register(status_handler, Command("status"), admin_filter)
+    dp.message.register(stats_handler, Command("stats"), admin_filter)
+    dp.message.register(sessions_handler, Command("sessions"), admin_filter)
+    dp.message.register(cleanup_handler, Command("cleanup"), admin_filter)
+    dp.message.register(health_handler, Command("health"), admin_filter)
+    dp.message.register(broadcast_handler, Command("broadcast"), admin_filter)
     
     # Estado de broadcast
     dp.message.register(
         processar_broadcast,
-        F.text & ~F.text.startswith('/') & admin_filter &
-        (lambda message: obter_sessao(str(message.chat.id)).get("estado") == "AGUARDANDO_BROADCAST")
+        F.text & ~F.text.startswith('/'),
+        admin_filter,
+        check_broadcast_state
     )
     
     # Callbacks

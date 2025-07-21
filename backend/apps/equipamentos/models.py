@@ -1,5 +1,5 @@
 # ================================================================
-# MODELO EQUIPAMENTO COMPLETO E CORRIGIDO
+# MODELO EQUIPAMENTO CORRIGIDO - SEM DUPLICAÇÕES
 # backend/apps/equipamentos/models.py
 # ================================================================
 from backend.apps.abastecimento.qr_mixins import EquipamentoQRMixin
@@ -7,7 +7,7 @@ from django.conf import settings
 import os
 from django.db import models
 from datetime import date
-from django.contrib.postgres.fields import ArrayField  # Adicione no topo se ainda não tiver
+from django.contrib.postgres.fields import ArrayField  
 
 class CategoriaEquipamento(models.Model):
     """Categorias de equipamentos para organização"""
@@ -35,13 +35,6 @@ class Equipamento(EquipamentoQRMixin, models.Model):
         ('MANUTENCAO', 'Em Manutenção'),
         ('PARADO', 'Parado'),
         ('INATIVO', 'Inativo'),
-    ]
-
-    FREQUENCIA_CHOICES = [
-        ('DIARIO', 'Diário'),
-        ('SEMANAL', 'Semanal'),
-        ('QUINZENAL', 'Quinzenal'),
-        ('MENSAL', 'Mensal'),
     ]
 
     STATUS_OPERACIONAL_CHOICES = [
@@ -82,9 +75,10 @@ class Equipamento(EquipamentoQRMixin, models.Model):
     cliente = models.ForeignKey('clientes.Cliente', on_delete=models.CASCADE, verbose_name="Cliente")
     empreendimento = models.ForeignKey('empreendimentos.Empreendimento', on_delete=models.CASCADE, verbose_name="Empreendimento")
 
-    # NR12
+    # NR12 - CORREÇÃO: APENAS UM CAMPO DE FREQUÊNCIA
     ativo_nr12 = models.BooleanField(default=True, verbose_name="Ativo para NR12")
-
+    
+    # ✅ CORRIGIDO: Apenas um campo para frequências (ArrayField)
     frequencias_checklist = ArrayField(
         models.CharField(max_length=10, choices=[
             ('DIARIA', 'Diária'),
@@ -103,6 +97,7 @@ class Equipamento(EquipamentoQRMixin, models.Model):
         blank=True,
         verbose_name="Tipo NR12"
     )
+
     # Manutenção
     proxima_manutencao_preventiva = models.DateField(null=True, blank=True, verbose_name="Próxima Manutenção Preventiva")
 
@@ -143,6 +138,66 @@ class Equipamento(EquipamentoQRMixin, models.Model):
         """Retorna o nome da categoria para compatibilidade"""
         return self.categoria.nome if self.categoria else ''
 
+    @property
+    def codigo(self):
+        """Gera código único baseado na categoria e ID"""
+        if self.categoria:
+            return f"{self.categoria.prefixo_codigo}{self.id:04d}"
+        return f"EQ{self.id:04d}"
+
+    # ✅ NOVOS MÉTODOS PARA BOT
+    def pode_ser_acessado_por_operador(self, operador_codigo):
+        """Verifica se operador pode acessar este equipamento via bot"""
+        try:
+            from backend.apps.operadores.models import Operador
+            operador = Operador.objects.get(
+                codigo=operador_codigo, 
+                status='ATIVO', 
+                ativo_bot=True
+            )
+            return operador.pode_operar_equipamento(self)
+        except Operador.DoesNotExist:
+            return False
+
+    @property 
+    def qr_url_bot(self):
+        """URL padronizada para bot acessar equipamento"""
+        return f"/bot/equipamento/{self.id}/"
+
+    def get_checklists_hoje(self):
+        """Retorna checklists de hoje para este equipamento"""
+        from backend.apps.nr12_checklist.models import ChecklistNR12
+        hoje = date.today()
+        return ChecklistNR12.objects.filter(
+            equipamento=self,
+            data_checklist=hoje
+        )
+
+    def precisa_checklist_hoje(self):
+        """Verifica se precisa de checklist hoje baseado na frequência"""
+        hoje = date.today()
+        
+        # Verificar se tem checklist hoje
+        checklist_hoje = self.get_checklists_hoje().first()
+        if checklist_hoje:
+            return False  # Já tem checklist hoje
+        
+        # Verificar frequências configuradas
+        if 'DIARIA' in self.frequencias_checklist:
+            return True
+        
+        if 'SEMANAL' in self.frequencias_checklist:
+            # Verificar se é segunda-feira ou se não teve checklist na semana
+            if hoje.weekday() == 0:  # Segunda-feira
+                return True
+        
+        if 'MENSAL' in self.frequencias_checklist:
+            # Verificar se é dia 1 ou primeiro dia útil do mês
+            if hoje.day == 1:
+                return True
+        
+        return False
+
     def pode_ser_operado_por(self, operador):
         """Verifica se operador pode usar este equipamento"""
         return operador.pode_operar_equipamento(self)
@@ -152,10 +207,12 @@ class Equipamento(EquipamentoQRMixin, models.Model):
         from django.utils import timezone
         if self.operador_atual and self.operador_atual != operador:
             raise ValueError(f"Equipamento já está sendo usado por {self.operador_atual.nome}")
+        
         self.operador_atual = operador
         self.data_inicio_uso = timezone.now()
         self.status_operacional = 'OPERANDO'
         self.save()
+        
         operador.ultimo_equipamento_usado = self
         operador.save()
 
@@ -168,6 +225,7 @@ class Equipamento(EquipamentoQRMixin, models.Model):
 
     @property
     def bot_link(self):
+        """Link direto para bot telegram"""
         return f"https://t.me/{settings.TELEGRAM_BOT_USERNAME}?start=eq{self.id}"
 
     def save(self, *args, **kwargs):

@@ -79,8 +79,12 @@ async def validar_data_nascimento(id_operador: int, data_digitada: str) -> bool:
     """
     try:
         # Converte entrada do usuário para formato da API
-        dia, mes, ano = map(int, data_digitada.split("/"))
-        data_usuario = f"{ano:04d}-{mes:02d}-{dia:02d}"
+        if "/" in data_digitada:
+            dia, mes, ano = map(int, data_digitada.split("/"))
+            data_usuario = f"{ano:04d}-{mes:02d}-{dia:02d}"
+        else:
+            # Se já estiver no formato correto
+            data_usuario = data_digitada
         
         # Busca dados do operador
         operador = await obter_operador_por_id(id_operador)

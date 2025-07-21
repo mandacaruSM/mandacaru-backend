@@ -1,4 +1,7 @@
-# backend/apps/abastecimento/qr_mixins.py
+# ================================================================
+# QR MIXINS CORRIGIDO - URLs PADRONIZADAS PARA BOT
+# backend/apps/equipamentos/qr_mixins.py (ou backend/apps/abastecimento/qr_mixins.py)
+# ================================================================
 
 import os
 import qrcode
@@ -11,7 +14,7 @@ from PIL import Image
 class EquipamentoQRMixin(models.Model):
     """
     Mixin abstrato que adiciona ao Equipamento um campo qr_code
-    e gera automaticamente um PNG com QR apontando para BASE_URL/equipamentos/<id>/
+    e gera automaticamente um PNG com QR apontando para URL padronizada do bot
     """
     qr_code = models.ImageField(
         upload_to='qr_codes/',
@@ -24,10 +27,11 @@ class EquipamentoQRMixin(models.Model):
         abstract = True
 
     def gerar_qr_png(self):
-        # URL que o QR deve apontar
-        url = f"{settings.BASE_URL}/equipamentos/{self.id}/"
+        """Gera QR code PNG com URL padronizada para bot"""
+        # ✅ URL PADRONIZADA PARA BOT
+        url = f"{settings.BASE_URL}/bot/equipamento/{self.id}/"
 
-        # tamanho da célula do QR
+        # Tamanho da célula do QR
         box_size = {
             'small': 4,
             'medium': 8,
@@ -44,24 +48,40 @@ class EquipamentoQRMixin(models.Model):
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
 
-        # insere logo se for o caso
+        # Inserir logo se configurado
         if getattr(settings, 'QR_INCLUDE_LOGO', False):
             logo_path = getattr(settings, 'QR_LOGO_PATH', None)
             if logo_path and os.path.exists(logo_path):
                 logo = Image.open(logo_path).convert("RGBA")
-                # dimensiona o logo para 1/4 do QR
+                # Dimensiona o logo para 1/4 do QR
                 w, h = img.size
-                logo.thumbnail((w//4, h//4), Image.ANTIALIAS)
+                logo.thumbnail((w//4, h//4), Image.Resampling.LANCZOS)
                 pos = ((w - logo.width) // 2, (h - logo.height) // 2)
                 img.paste(logo, pos, mask=logo)
 
-        # salva em memória
+        # Salvar em memória
         buffer = BytesIO()
         img.save(buffer, format='PNG')
         filename = f"equip_{self.id}.png"
 
-        # atualiza o campo qr_code sem disparar novo save completo
+        # Atualizar o campo qr_code sem disparar novo save completo
         self.qr_code.save(filename, ContentFile(buffer.getvalue()), save=False)
 
-        # persiste apenas o campo qr_code
+        # Persistir apenas o campo qr_code
         super().save(update_fields=['qr_code'])
+
+    @property
+    def qr_url_completa(self):
+        """URL completa que o QR code aponta"""
+        return f"{settings.BASE_URL}/bot/equipamento/{self.id}/"
+
+    @property
+    def qr_dados_bot(self):
+        """Dados para o bot identificar o equipamento"""
+        return {
+            'tipo': 'equipamento',
+            'id': self.id,
+            'codigo': getattr(self, 'codigo', f'EQ{self.id}'),
+            'nome': self.nome,
+            'categoria': self.categoria.codigo if hasattr(self, 'categoria') else 'N/A'
+        }
