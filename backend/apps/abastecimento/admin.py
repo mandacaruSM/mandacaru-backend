@@ -1,7 +1,7 @@
 # backend/apps/abastecimento/admin.py
 
 from django.contrib import admin
-from .models import TipoCombustivel, RegistroAbastecimento, RelatorioConsumo
+from .models import TipoCombustivel, RegistroAbastecimento
 
 @admin.register(TipoCombustivel)
 class TipoCombustivelAdmin(admin.ModelAdmin):
@@ -15,6 +15,6 @@ class RegistroAbastecimentoAdmin(admin.ModelAdmin):
     search_fields = ['numero', 'equipamento__nome']
     readonly_fields = ['numero', 'valor_total', 'criado_em', 'atualizado_em']
 
-@admin.register(RelatorioConsumo)
-class RelatorioConsumoAdmin(admin.ModelAdmin):
-    list_display = ['equipamento', 'periodo_inicio', 'periodo_fim', 'total_litros', 'total_valor', 'consumo_medio_hora']
+#@admin.register(RelatorioConsumo)
+#class RelatorioConsumoAdmin(admin.ModelAdmin):
+#    list_display = ['equipamento', 'periodo_inicio', 'periodo_fim', 'total_litros', 'total_valor', 'consumo_medio_hora']

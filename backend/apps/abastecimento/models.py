@@ -1,4 +1,7 @@
-# backend/apps/abastecimento/models.py
+# ----------------------------------------------------------------
+# 4. ATUALIZAR MODELS PARA CORRIGIR IMPORTS
+# backend/apps/abastecimento/models.py - VERSÃO CORRIGIDA
+# ----------------------------------------------------------------
 
 from django.db import models
 from django.contrib.auth import get_user_model
@@ -6,10 +9,8 @@ from django.core.exceptions import ValidationError
 from decimal import Decimal
 from datetime import date
 from backend.apps.equipamentos.models import Equipamento
-from backend.apps.manutencao.models import HistoricoManutencao
 
 User = get_user_model()
-
 
 class TipoCombustivel(models.Model):
     nome = models.CharField(max_length=50, unique=True)
@@ -25,6 +26,26 @@ class TipoCombustivel(models.Model):
 
     def __str__(self):
         return self.nome
+
+    def get_estoque_almoxarifado(self):
+        """Retorna o estoque do almoxarifado para este combustível"""
+        try:
+            from backend.apps.almoxarifado.models import EstoqueCombustivel
+            return EstoqueCombustivel.objects.get(tipo_combustivel=self)
+        except:
+            return None
+
+    @property
+    def quantidade_disponivel_almoxarifado(self):
+        """Quantidade disponível no almoxarifado"""
+        estoque = self.get_estoque_almoxarifado()
+        return estoque.quantidade_em_estoque if estoque else Decimal('0.000')
+
+    @property
+    def estoque_baixo(self):
+        """Verifica se o estoque está baixo"""
+        estoque = self.get_estoque_almoxarifado()
+        return estoque.abaixo_do_minimo if estoque else False
 
 
 class RegistroAbastecimento(models.Model):
@@ -44,16 +65,39 @@ class RegistroAbastecimento(models.Model):
         max_length=20,
         choices=ORIGEM_COMBUSTIVEL_CHOICES,
         default='POSTO_EXTERNO',
-        verbose_name="Origem do Combustível"
+        verbose_name="Origem do Combustível",
+        help_text="Selecione 'Almoxarifado' para baixa automática no estoque"
     )
 
     data_abastecimento = models.DateTimeField()
     data_registro = models.DateTimeField(auto_now_add=True)
 
     tipo_combustivel = models.ForeignKey(TipoCombustivel, on_delete=models.CASCADE)
-    quantidade_litros = models.DecimalField(max_digits=10, decimal_places=3)
+    quantidade_litros = models.DecimalField(
+        max_digits=10, 
+        decimal_places=3,
+        help_text="Quantidade que será descontada do estoque se origem for Almoxarifado"
+    )
     preco_litro = models.DecimalField(max_digits=10, decimal_places=3)
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
+
+    # Campos de validação para almoxarifado
+    estoque_antes_abastecimento = models.DecimalField(
+        max_digits=10, 
+        decimal_places=3, 
+        null=True, 
+        blank=True,
+        verbose_name="Estoque Antes (Litros)",
+        help_text="Estoque registrado antes do abastecimento"
+    )
+    estoque_depois_abastecimento = models.DecimalField(
+        max_digits=10, 
+        decimal_places=3, 
+        null=True, 
+        blank=True,
+        verbose_name="Estoque Depois (Litros)",
+        help_text="Estoque após a baixa automática"
+    )
 
     tipo_medicao = models.CharField(max_length=15, choices=TIPO_MEDICAO_CHOICES, default='HORIMETRO')
     medicao_atual = models.DecimalField(max_digits=10, decimal_places=2)
@@ -86,79 +130,43 @@ class RegistroAbastecimento(models.Model):
             models.Index(fields=['equipamento', 'data_abastecimento']),
             models.Index(fields=['numero']),
             models.Index(fields=['aprovado']),
+            models.Index(fields=['origem_combustivel']),
         ]
 
     def clean(self):
         super().clean()
+        
+        # Validação específica para almoxarifado
+        if self.origem_combustivel == 'ALMOXARIFADO':
+            self._validar_estoque_almoxarifado()
 
-        if self.tipo_medicao == 'HORIMETRO':
-            self._validar_horimetro_com_manutencao()
-
-        self._validar_sequencia_abastecimentos()
-
-        if not self.medicao_anterior:
-            self.medicao_anterior = self._obter_medicao_anterior()
-
-    def _validar_horimetro_com_manutencao(self):
-        ultima = HistoricoManutencao.objects.filter(
-            equipamento=self.equipamento,
-            data__lte=self.data_abastecimento.date()
-        ).order_by('-data', '-horimetro').first()
-
-        if ultima and self.medicao_atual < ultima.horimetro:
+    def _validar_estoque_almoxarifado(self):
+        """Valida se há estoque suficiente no almoxarifado"""
+        try:
+            from backend.apps.almoxarifado.models import EstoqueCombustivel
+            
+            estoque = EstoqueCombustivel.objects.get(
+                tipo_combustivel=self.tipo_combustivel,
+                ativo=True
+            )
+            
+            if estoque.quantidade_em_estoque < self.quantidade_litros:
+                raise ValidationError({
+                    'quantidade_litros': f'Estoque insuficiente no almoxarifado. '
+                                       f'Disponível: {estoque.quantidade_em_estoque}L, '
+                                       f'Solicitado: {self.quantidade_litros}L'
+                })
+            
+            # Alerta de estoque baixo após o abastecimento
+            estoque_pos_abastecimento = estoque.quantidade_em_estoque - self.quantidade_litros
+            if estoque_pos_abastecimento <= estoque.estoque_minimo:
+                self.observacoes += f"\n⚠️ ALERTA: Estoque ficará baixo após abastecimento ({estoque_pos_abastecimento}L)"
+                
+        except:
             raise ValidationError({
-                'medicao_atual': f'Horímetro ({self.medicao_atual}) menor que última manutenção ({ultima.horimetro})'
+                'tipo_combustivel': f'Combustível {self.tipo_combustivel.nome} não cadastrado no almoxarifado. '
+                                  f'Configure o estoque antes de usar como origem.'
             })
-
-        proxima = HistoricoManutencao.objects.filter(
-            equipamento=self.equipamento,
-            data__gt=self.data_abastecimento.date()
-        ).order_by('data', 'horimetro').first()
-
-        if proxima and self.medicao_atual > proxima.horimetro:
-            raise ValidationError({
-                'medicao_atual': f'Horímetro ({self.medicao_atual}) maior que próxima manutenção ({proxima.horimetro})'
-            })
-
-    def _validar_sequencia_abastecimentos(self):
-        anterior = RegistroAbastecimento.objects.filter(
-            equipamento=self.equipamento,
-            data_abastecimento__lt=self.data_abastecimento
-        ).exclude(id=self.id).order_by('-data_abastecimento').first()
-
-        if anterior and self.medicao_atual <= anterior.medicao_atual:
-            raise ValidationError({
-                'medicao_atual': f'Medidor deve ser maior que abastecimento anterior ({anterior.medicao_atual})'
-            })
-
-        posterior = RegistroAbastecimento.objects.filter(
-            equipamento=self.equipamento,
-            data_abastecimento__gt=self.data_abastecimento
-        ).exclude(id=self.id).order_by('data_abastecimento').first()
-
-        if posterior and self.medicao_atual >= posterior.medicao_atual:
-            raise ValidationError({
-                'medicao_atual': f'Medidor deve ser menor que próximo abastecimento ({posterior.medicao_atual})'
-            })
-
-    def _obter_medicao_anterior(self):
-        anterior = RegistroAbastecimento.objects.filter(
-            equipamento=self.equipamento,
-            data_abastecimento__lt=self.data_abastecimento
-        ).exclude(id=self.id).order_by('-data_abastecimento').first()
-
-        if anterior:
-            return anterior.medicao_atual
-
-        manutencao = HistoricoManutencao.objects.filter(
-            equipamento=self.equipamento,
-            data__lt=self.data_abastecimento.date()
-        ).order_by('-data', '-horimetro').first()
-
-        if manutencao:
-            return manutencao.horimetro
-
-        return Decimal('0.00')
 
     def save(self, *args, **kwargs):
         if not self.numero:
@@ -178,38 +186,24 @@ class RegistroAbastecimento(models.Model):
         novo_num = 1 if not ultimo else int(ultimo.numero[-4:]) + 1
         return f"{prefixo}{novo_num:04d}"
 
+    def _obter_medicao_anterior(self):
+        """Método para obter medição anterior"""
+        anterior = RegistroAbastecimento.objects.filter(
+            equipamento=self.equipamento,
+            data_abastecimento__lt=self.data_abastecimento
+        ).exclude(id=self.id).order_by('-data_abastecimento').first()
+
+        if anterior:
+            return anterior.medicao_atual
+
+        return Decimal('0.00')
+
     @property
     def consumo_periodo(self):
         if not self.medicao_anterior or self.medicao_atual <= self.medicao_anterior:
             return None
         return round(self.quantidade_litros / (self.medicao_atual - self.medicao_anterior), 2)
 
-    @property
-    def rendimento(self):
-        if not self.medicao_anterior or self.medicao_atual <= self.medicao_anterior:
-            return None
-        return round((self.medicao_atual - self.medicao_anterior) / self.quantidade_litros, 2)
-
     def __str__(self):
-        return f"{self.numero} - {self.equipamento.nome} - {self.data_abastecimento.strftime('%d/%m/%Y')}"
-
-
-class RelatorioConsumo(models.Model):
-    equipamento = models.ForeignKey(Equipamento, on_delete=models.CASCADE)
-    periodo_inicio = models.DateField()
-    periodo_fim = models.DateField()
-    total_litros = models.DecimalField(max_digits=10, decimal_places=3)
-    total_valor = models.DecimalField(max_digits=10, decimal_places=2)
-    total_horas = models.DecimalField(max_digits=10, decimal_places=2)
-    consumo_medio_hora = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
-    preco_medio_litro = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
-    gerado_em = models.DateTimeField(auto_now_add=True)
-    gerado_por = models.ForeignKey(User, on_delete=models.CASCADE)
-
-    class Meta:
-        unique_together = ['equipamento', 'periodo_inicio', 'periodo_fim']
-        verbose_name = 'Relatório de Consumo'
-        verbose_name_plural = 'Relatórios de Consumo'
-
-    def __str__(self):
-        return f"Relatório {self.equipamento.nome} - {self.periodo_inicio} a {self.periodo_fim}"
+        origem_icon = "🏪" if self.origem_combustivel == "ALMOXARIFADO" else "⛽"
+        return f"{origem_icon} {self.numero} - {self.equipamento.nome}"
