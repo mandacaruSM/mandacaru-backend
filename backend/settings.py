@@ -163,3 +163,16 @@ QR_LOGO_PATH = os.path.join(BASE_DIR, 'static', 'img', 'logo.png')  # se tiver l
 QR_DEFAULT_SIZE = 'medium'
 QR_INCLUDE_LOGO = True
 BASE_URL = 'http://localhost:8000'  # ou sua URL de produção
+
+# ✅ ADICIONE ESTAS LINHAS NO FINAL DO ARQUIVO
+
+# Configurações do Bot Telegram (novas/atualizadas)
+API_BASE_URL = 'http://127.0.0.1:8000/api'
+BOT_DEBUG = config('BOT_DEBUG', default=True, cast=bool)
+SESSION_TIMEOUT_HOURS = config('SESSION_TIMEOUT_HOURS', default=24, cast=int)
+ADMIN_IDS = config('ADMIN_IDS', default='').split(',') if config('ADMIN_IDS', default='') else []
+
+# Para leitura de QR Code
+QR_CODE_ENABLED = True
+QR_CODE_SIZE = (300, 300)
+
