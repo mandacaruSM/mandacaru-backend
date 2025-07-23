@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     # Apps internos - personalizados do seu projeto
     'backend.apps.auth_cliente',
     'backend.apps.bot_telegram',
+    'backend.apps.shared',
     'backend.apps.cliente_portal',
     'backend.apps.clientes',
     'backend.apps.dashboard',
@@ -134,13 +135,14 @@ CORS_ALLOWED_ORIGINS = [
 
 # Upload de arquivos
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # ✅ Configurações do Telegram Bot
 TELEGRAM_BOT_USERNAME = config('TELEGRAM_BOT_USERNAME', default='Mandacarusmbot')
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_WEBHOOK_URL = config('TELEGRAM_WEBHOOK_URL', default='')
+TELEGRAM_BOT_URL = 'https://t.me/Mandacarusmbot'
+BASE_URL = 'http://localhost:8000'  # ou sua URL de produção
 
 # ✅ Configurações do Celery (opcionais por enquanto)
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
@@ -153,9 +155,6 @@ QR_LOGO_PATH = os.path.join(BASE_DIR, 'static', 'img', 'logo.png')
 QR_DEFAULT_SIZE = 'medium'
 QR_INCLUDE_LOGO = True
 
-# Diretórios de mídia
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Criar diretório de QR codes
 QR_CODES_DIR = os.path.join(MEDIA_ROOT, 'qr_codes')

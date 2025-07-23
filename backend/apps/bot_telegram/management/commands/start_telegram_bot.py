@@ -1,1121 +1,550 @@
 # ================================================================
-# backend/apps/bot_telegram/management/commands/start_telegram_bot.py
-# BOT TELEGRAM MANDACARU - VERSÃO FINAL COMPLETA
+# ARQUIVO: backend/apps/bot_telegram/management/commands/start_telegram_bot.py
+# Comando atualizado com suporte completo a QR
 # ================================================================
 
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from django.utils import timezone
-from asgiref.sync import sync_to_async
-
 import asyncio
-import logging
-import re
-import json
-import os
-from datetime import datetime, timedelta
-from typing import Dict, Optional, List
-
-# Imports do Telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+import logging
+from datetime import datetime
 
-# Imports para QR Code
-try:
-    import cv2
-    import numpy as np
-    from pyzbar.pyzbar import decode
-    from PIL import Image
-    from io import BytesIO
-    QR_AVAILABLE = True
-except ImportError:
-    QR_AVAILABLE = False
-
+# Importações dos modelos
 from backend.apps.operadores.models import Operador
+from backend.apps.equipamentos.models import Equipamento
+from backend.apps.nr12_checklist.models import ChecklistNR12
+
+# Importações do bot
+from backend.apps.bot_telegram.handlers.message import text_handler
+from backend.apps.bot_telegram.handlers.callback import callback_handler
+from backend.apps.bot_telegram.handlers.qr import handle_qr_photo
+from backend.apps.bot_telegram.utils.sessions import get_session, save_session, clear_session
 
 logger = logging.getLogger(__name__)
 
-# ================================================================
-# SISTEMA DE AUTENTICAÇÃO
-# ================================================================
-
-class SistemaAuth:
-    def __init__(self):
-        self.sessoes = {}
-    
-    async def verificar_operador(self, chat_id: str) -> Optional[dict]:
-        """Verifica se operador existe"""
-        try:
-            operador = await sync_to_async(
-                Operador.objects.filter(chat_id_telegram=chat_id, ativo_bot=True).first
-            )()
-            
-            if operador:
-                return {
-                    'id': operador.id,
-                    'nome': operador.nome,
-                    'codigo': getattr(operador, 'codigo', str(operador.id)),
-                    'chat_id': operador.chat_id_telegram,
-                    'tipo': 'supervisor' if getattr(operador, 'pode_ver_relatorios', False) else 'operador'
-                }
-            return None
-        except Exception as e:
-            logger.error(f"Erro ao verificar operador: {e}")
-            return None
-    
-    async def criar_operador_temp(self, dados: dict) -> bool:
-        """Cria operador temporário"""
-        try:
-            existe = await sync_to_async(
-                Operador.objects.filter(chat_id_telegram=dados['chat_id_telegram']).exists
-            )()
-            
-            if existe:
-                return False
-            
-            operador_data = {
-                'nome': dados['nome'],
-                'chat_id_telegram': dados['chat_id_telegram'],
-                'ativo_bot': False,
-                'observacoes': f'Cadastrado via bot em {datetime.now().strftime("%d/%m/%Y %H:%M")}'
-            }
-            
-            if 'data_nascimento' in dados and dados['data_nascimento']:
-                try:
-                    if '/' in dados['data_nascimento']:
-                        data_obj = datetime.strptime(dados['data_nascimento'], '%d/%m/%Y').date()
-                    else:
-                        data_obj = datetime.strptime(dados['data_nascimento'], '%Y-%m-%d').date()
-                    operador_data['data_nascimento'] = data_obj
-                except ValueError:
-                    pass
-            
-            await sync_to_async(Operador.objects.create)(**operador_data)
-            logger.info(f"Operador temporário criado: {dados['nome']}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Erro ao criar operador: {e}")
-            return False
-
-# ================================================================
-# LEITOR DE QR CODE
-# ================================================================
-
-class LeitorQR:
-    @staticmethod
-    def processar_imagem(image_bytes: bytes) -> Optional[str]:
-        """Processa QR Code de imagem"""
-        if not QR_AVAILABLE:
-            return None
-        
-        try:
-            pil_image = Image.open(BytesIO(image_bytes))
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
-            
-            np_image = np.array(pil_image)
-            opencv_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR)
-            decoded_objects = decode(opencv_image)
-            
-            for obj in decoded_objects:
-                qr_data = obj.data.decode('utf-8', errors='ignore').strip()
-                if qr_data:
-                    return qr_data
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Erro ao processar QR: {e}")
-            return None
-    
-    @staticmethod
-    def extrair_id_equipamento(qr_data: str) -> Optional[int]:
-        """Extrai ID do equipamento"""
-        if not qr_data:
-            return None
-        
-        padroes = [
-            r'start=eq(\d+)',
-            r'start=equip(\d+)',
-            r'\beq(\d+)\b',
-            r'(\d+)',
-        ]
-        
-        for padrao in padroes:
-            match = re.search(padrao, qr_data, re.IGNORECASE)
-            if match:
-                try:
-                    return int(match.group(1))
-                except (ValueError, IndexError):
-                    continue
-        
-        return None
-
-# ================================================================
-# BOT MANAGER COMPLETO
-# ================================================================
-
-class BotManager:
-    def __init__(self):
-        self.auth = SistemaAuth()
-        self.qr = LeitorQR()
-        self.user_sessions = {}
-        self.estados_conversa = {}  # Para conversações em andamento
-
-    # ================================================================
-    # HANDLERS PRINCIPAIS
-    # ================================================================
-
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Comando /start"""
-        user_id = str(update.effective_user.id)
-        
-        operador = await self.auth.verificar_operador(user_id)
-        
-        if operador:
-            self.user_sessions[user_id] = {
-                'operador': operador,
-                'estado': 'menu_principal',
-                'ultimo_acesso': datetime.now()
-            }
-            
-            await update.message.reply_text(
-                f"👋 **Bem-vindo, {operador['nome']}!**\n\n"
-                f"👤 Função: {operador['tipo'].title()}\n\n"
-                "📱 **Como usar:**\n"
-                "• Escaneie o QR Code do equipamento\n"
-                "• Use os botões do menu\n\n"
-                "🔧 **Pronto para trabalhar!**",
-                parse_mode='Markdown',
-                reply_markup=self.teclado_principal(operador)
-            )
-        else:
-            self.user_sessions[user_id] = {
-                'estado': 'aguardando_nome',
-                'dados_temp': {},
-                'ultimo_acesso': datetime.now()
-            }
-            
-            await update.message.reply_text(
-                "🔐 **Primeiro Acesso**\n\n"
-                "Para usar o bot, preciso cadastrar você.\n\n"
-                "📝 **Digite seu nome completo:**",
-                parse_mode='Markdown'
-            )
-
-    async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handler de texto principal"""
-        user_id = str(update.effective_user.id)
-        texto = update.message.text.strip()
-        
-        # Verificar se está em conversa específica
-        estado_conversa = self.estados_conversa.get(user_id)
-        
-        if estado_conversa:
-            await self._processar_conversa(update, texto, estado_conversa)
-            return
-        
-        # Processar estados normais
-        sessao = self.user_sessions.get(user_id, {})
-        estado = sessao.get('estado', 'sem_sessao')
-        
-        if estado == 'aguardando_nome':
-            await self.processar_nome(update, texto)
-        elif estado == 'aguardando_data_nascimento':
-            await self.processar_data_nascimento(update, texto)
-        elif 't.me/' in texto and 'start=' in texto:
-            await self.processar_qr_link(update, texto)
-        elif texto == "📷 Escanear QR Code":
-            msg = "📷 **Envie uma foto do QR Code** do equipamento\n\n"
-            if not QR_AVAILABLE:
-                msg += "⚠️ **Leitura por foto indisponível**\n"
-                msg += "Envie o link como texto: `https://t.me/SeuBot?start=eq123`"
-            else:
-                msg += "💡 **Dica:** Mantenha a câmera estável"
-            
-            await update.message.reply_text(msg, parse_mode='Markdown')
-        elif texto == "❓ Ajuda":
-            await self.mostrar_ajuda(update)
-        elif texto == "👤 Meu Perfil":
-            await self.mostrar_perfil(update)
-        elif texto == "📊 Relatórios":
-            await self.mostrar_relatorios_menu(update)
-        else:
-            if 'operador' in sessao:
-                await update.message.reply_text(
-                    "🤔 Não entendi. Use os botões do menu ou escaneie um QR Code."
-                )
-            else:
-                await update.message.reply_text("❌ Digite /start para começar.")
-
-    async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handler de fotos"""
-        user_id = str(update.effective_user.id)
-        
-        if not QR_AVAILABLE:
-            await update.message.reply_text(
-                "❌ **Leitura por foto indisponível**\n\n"
-                "Envie o link do QR Code como texto."
-            )
-            return
-        
-        sessao = self.user_sessions.get(user_id, {})
-        if 'operador' not in sessao:
-            await update.message.reply_text("❌ Digite /start para começar.")
-            return
-        
-        msg_processando = await update.message.reply_text("📷 **Processando...**")
-        
-        try:
-            photo_file = await update.message.photo[-1].get_file()
-            photo_bytes = await photo_file.download_as_bytearray()
-            
-            qr_data = self.qr.processar_imagem(bytes(photo_bytes))
-            
-            if qr_data:
-                equipamento_id = self.qr.extrair_id_equipamento(qr_data)
-                if equipamento_id:
-                    await self.processar_equipamento(update, equipamento_id, msg_processando)
-                else:
-                    await msg_processando.edit_text("❌ QR Code inválido")
-            else:
-                await msg_processando.edit_text("❌ QR Code não detectado")
-                
-        except Exception as e:
-            await msg_processando.edit_text("❌ Erro ao processar imagem")
-
-    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handler de callbacks"""
-        query = update.callback_query
-        await query.answer()
-        
-        data = query.data
-        user_id = str(query.from_user.id)
-        
-        sessao = self.user_sessions.get(user_id, {})
-        if 'operador' not in sessao:
-            await query.edit_message_text("❌ Sessão expirada. Digite /start")
-            return
-        
-        operador = sessao['operador']
-        
-        if data.startswith('checklist_'):
-            await self._iniciar_checklist(query, data, operador)
-        elif data.startswith('abastecimento_'):
-            await self._iniciar_abastecimento(query, data, operador)
-        elif data.startswith('anomalia_'):
-            await self._iniciar_anomalia(query, data, operador)
-        elif data.startswith('horimetro_'):
-            await self._iniciar_horimetro(query, data, operador)
-        elif data.startswith('relatorio_'):
-            await self._iniciar_relatorio(query, data, operador)
-        elif data.startswith('confirmar_'):
-            await self._processar_confirmacao(query, data, operador)
-        elif data.startswith('cancelar_'):
-            await self._processar_cancelamento(query, data)
-        elif data == 'menu_principal':
-            await self._voltar_menu_principal(query, operador)
-
-    # ================================================================
-    # PROCESSAMENTO DE CONVERSAS
-    # ================================================================
-
-    async def _processar_conversa(self, update: Update, texto: str, estado_conversa: dict):
-        """Processa conversas em andamento"""
-        user_id = str(update.effective_user.id)
-        sessao = self.user_sessions.get(user_id, {})
-        operador = sessao.get('operador')
-        
-        if not operador:
-            del self.estados_conversa[user_id]
-            await update.message.reply_text("❌ Sessão expirada. Digite /start")
-            return
-        
-        acao = estado_conversa.get('acao')
-        etapa = estado_conversa.get('etapa')
-        
-        if acao == 'abastecimento':
-            if etapa == 'quantidade':
-                await self._processar_abastecimento_quantidade(update, texto, operador)
-            elif etapa == 'valor':
-                await self._processar_abastecimento_valor(update, texto, operador)
-        elif acao == 'anomalia':
-            if etapa == 'descricao':
-                await self._processar_anomalia_descricao(update, texto, operador)
-        elif acao == 'horimetro':
-            if etapa == 'novo_valor':
-                await self._processar_horimetro_valor(update, texto, operador)
-
-    # ================================================================
-    # CHECKLIST NR12
-    # ================================================================
-
-    async def _iniciar_checklist(self, query, data: str, operador: dict):
-        """Inicia checklist NR12"""
-        equipamento_id = int(data.split('_')[1])
-        
-        hoje = timezone.now().date()
-        checklist_existente = await self._verificar_checklist_hoje(equipamento_id, hoje)
-        
-        if checklist_existente:
-            await query.edit_message_text(
-                f"✅ **Checklist já realizado hoje**\n\n"
-                f"📋 Equipamento: {equipamento_id}\n"
-                f"📅 Data: {hoje.strftime('%d/%m/%Y')}\n"
-                f"✓ Status: Concluído\n"
-                f"👤 Responsável: {checklist_existente.get('operador', 'N/A')}\n\n"
-                f"🔄 **Ações disponíveis:**",
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📋 Ver Detalhes", callback_data=f'ver_checklist_{equipamento_id}')],
-                    [InlineKeyboardButton("🔙 Voltar", callback_data=f'menu_equipamento_{equipamento_id}')]
-                ])
-            )
-        else:
-            await query.edit_message_text(
-                f"📋 **Novo Checklist NR12**\n\n"
-                f"🔧 Equipamento: {equipamento_id}\n"
-                f"📅 Data: {hoje.strftime('%d/%m/%Y')}\n"
-                f"👤 Operador: {operador['nome']}\n\n"
-                f"⚠️ **Verificações de Segurança NR12:**\n"
-                f"• Dispositivos de proteção\n"
-                f"• Sistemas de parada de emergência\n"
-                f"• Isolamento de energia\n"
-                f"• Condições gerais do equipamento\n\n"
-                f"🚀 **Iniciar checklist agora?**",
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Iniciar Checklist", callback_data=f'confirmar_checklist_{equipamento_id}')],
-                    [InlineKeyboardButton("❌ Cancelar", callback_data=f'cancelar_checklist_{equipamento_id}')]
-                ])
-            )
-
-    async def _verificar_checklist_hoje(self, equipamento_id: int, data) -> dict:
-        """Verifica se já existe checklist para hoje"""
-        try:
-            # TODO: Implementar busca real no banco
-            # Por enquanto, simular que não existe para permitir teste
-            return None
-        except Exception:
-            return None
-
-    async def _processar_confirmacao(self, query, data: str, operador: dict):
-        """Processa confirmações"""
-        if data.startswith('confirmar_checklist_'):
-            equipamento_id = int(data.split('_')[2])
-            sucesso = await self._executar_checklist(equipamento_id, operador)
-            
-            if sucesso:
-                await query.edit_message_text(
-                    f"✅ **Checklist NR12 Concluído!**\n\n"
-                    f"🔧 Equipamento: {equipamento_id}\n"
-                    f"📅 Data: {timezone.now().strftime('%d/%m/%Y %H:%M')}\n"
-                    f"👤 Operador: {operador['nome']}\n\n"
-                    f"📋 **Todos os itens verificados:**\n"
-                    f"✓ Dispositivos de proteção\n"
-                    f"✓ Parada de emergência\n"
-                    f"✓ Isolamento de energia\n"
-                    f"✓ Condições gerais\n\n"
-                    f"🔒 **Equipamento liberado para operação!**",
-                    parse_mode='Markdown',
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 Menu Principal", callback_data='menu_principal')]
-                    ])
-                )
-            else:
-                await query.edit_message_text("❌ Erro ao salvar checklist")
-
-    async def _executar_checklist(self, equipamento_id: int, operador: dict) -> bool:
-        """Executa e salva checklist"""
-        try:
-            # TODO: Implementar salvamento real
-            dados_checklist = {
-                'equipamento_id': equipamento_id,
-                'operador': operador,
-                'data': timezone.now(),
-                'itens_verificados': [
-                    'Dispositivos de proteção',
-                    'Parada de emergência', 
-                    'Isolamento de energia',
-                    'Condições gerais'
-                ],
-                'status': 'CONCLUIDO'
-            }
-            logger.info(f"Checklist salvo: {dados_checklist}")
-            return True
-        except Exception as e:
-            logger.error(f"Erro ao executar checklist: {e}")
-            return False
-
-    # ================================================================
-    # ABASTECIMENTO
-    # ================================================================
-
-    async def _iniciar_abastecimento(self, query, data: str, operador: dict):
-        """Inicia registro de abastecimento"""
-        equipamento_id = int(data.split('_')[1])
-        user_id = str(query.from_user.id)
-        
-        self.estados_conversa[user_id] = {
-            'acao': 'abastecimento',
-            'equipamento_id': equipamento_id,
-            'dados': {},
-            'etapa': 'quantidade'
-        }
-        
-        await query.edit_message_text(
-            f"⛽ **Registro de Abastecimento**\n\n"
-            f"🔧 Equipamento: {equipamento_id}\n"
-            f"📅 Data: {timezone.now().strftime('%d/%m/%Y %H:%M')}\n"
-            f"👤 Operador: {operador['nome']}\n\n"
-            f"📝 **Digite a quantidade de combustível (litros):**\n\n"
-            f"💡 **Exemplos:**\n"
-            f"• 50 (para 50 litros)\n"
-            f"• 50.5 (para 50,5 litros)\n"
-            f"• 100 (para 100 litros)",
-            parse_mode='Markdown'
-        )
-
-    async def _processar_abastecimento_quantidade(self, update: Update, texto: str, operador: dict):
-        """Processa quantidade de combustível"""
-        user_id = str(update.effective_user.id)
-        estado = self.estados_conversa.get(user_id)
-        
-        if not estado or estado.get('acao') != 'abastecimento':
-            return
-        
-        try:
-            quantidade = float(texto.replace(',', '.'))
-            if quantidade <= 0:
-                raise ValueError("Quantidade deve ser positiva")
-            if quantidade > 1000:
-                raise ValueError("Quantidade muito alta")
-        except ValueError:
-            await update.message.reply_text(
-                "❌ **Quantidade inválida**\n\n"
-                "Digite um número válido:\n"
-                "• Use pontos ou vírgulas para decimais\n"
-                "• Exemplo: 50 ou 50.5\n\n"
-                "Digite novamente:"
-            )
-            return
-        
-        estado['dados']['quantidade'] = quantidade
-        estado['etapa'] = 'valor'
-        
-        await update.message.reply_text(
-            f"✅ **Quantidade registrada: {quantidade}L**\n\n"
-            f"💰 **Agora digite o valor total pago (R$):**\n\n"
-            f"💡 **Exemplos:**\n"
-            f"• 300 (para R$ 300,00)\n"
-            f"• 300.50 (para R$ 300,50)\n"
-            f"• /pular (se não souber o valor)",
-            parse_mode='Markdown'
-        )
-
-    async def _processar_abastecimento_valor(self, update: Update, texto: str, operador: dict):
-        """Processa valor do abastecimento"""
-        user_id = str(update.effective_user.id)
-        estado = self.estados_conversa.get(user_id)
-        
-        if not estado or estado.get('acao') != 'abastecimento':
-            return
-        
-        valor_total = 0
-        
-        if texto != '/pular':
-            try:
-                valor_total = float(texto.replace('R$', '').replace(',', '.').strip())
-                if valor_total < 0:
-                    raise ValueError("Valor não pode ser negativo")
-            except ValueError:
-                await update.message.reply_text(
-                    "❌ **Valor inválido**\n\n"
-                    "Digite um número válido:\n"
-                    "• Exemplo: 300.50\n"
-                    "• Ou digite /pular\n\n"
-                    "Digite novamente:"
-                )
-                return
-        
-        # Calcular valores
-        quantidade = estado['dados']['quantidade']
-        valor_por_litro = valor_total / quantidade if valor_total > 0 else 0
-        
-        # Salvar abastecimento
-        sucesso = await self._salvar_abastecimento({
-            'equipamento_id': estado['equipamento_id'],
-            'quantidade': quantidade,
-            'valor_total': valor_total,
-            'valor_por_litro': valor_por_litro,
-            'operador': operador,
-            'data': timezone.now()
-        })
-        
-        # Limpar estado
-        if user_id in self.estados_conversa:
-            del self.estados_conversa[user_id]
-        
-        if sucesso:
-            texto_resumo = (
-                f"✅ **Abastecimento Registrado!**\n\n"
-                f"🔧 **Equipamento:** {estado['equipamento_id']}\n"
-                f"⛽ **Quantidade:** {quantidade}L\n"
-                f"💰 **Valor total:** R$ {valor_total:.2f}\n"
-                f"📊 **Preço/litro:** R$ {valor_por_litro:.2f}\n"
-                f"👤 **Operador:** {operador['nome']}\n"
-                f"📅 **Data:** {timezone.now().strftime('%d/%m/%Y %H:%M')}\n\n"
-                f"💾 **Registro salvo com sucesso!**"
-            )
-            
-            if valor_total == 0:
-                texto_resumo = texto_resumo.replace("R$ 0.00", "Não informado")
-            
-            await update.message.reply_text(
-                texto_resumo,
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Menu Principal", callback_data='menu_principal')]
-                ])
-            )
-        else:
-            await update.message.reply_text("❌ Erro ao salvar abastecimento")
-
-    async def _salvar_abastecimento(self, dados: dict) -> bool:
-        """Salva abastecimento no banco"""
-        try:
-            # TODO: Implementar salvamento real no seu modelo
-            logger.info(f"Abastecimento salvo: {dados}")
-            return True
-        except Exception as e:
-            logger.error(f"Erro ao salvar abastecimento: {e}")
-            return False
-    # ================================================================
-    # ANOMALIAS
-    # ================================================================
-    
-    async def _iniciar_anomalia(self, query, data: str, operador: dict):
-        """Inicia registro de anomalia"""
-        equipamento_id = int(data.split('_')[1])
-        user_id = str(query.from_user.id)
-        
-        self.estados_conversa[user_id] = {
-            'acao': 'anomalia',
-            'equipamento_id': equipamento_id,
-            'dados': {},
-            'etapa': 'descricao'
-        }
-        
-        await query.edit_message_text(
-            f"🔧 **Registro de Anomalia**\n\n"
-            f"🔧 Equipamento: {equipamento_id}\n"
-            f"📅 Data: {timezone.now().strftime('%d/%m/%Y %H:%M')}\n"
-            f"👤 Operador: {operador['nome']}\n\n"
-            f"📝 **Descreva a anomalia encontrada:**\n\n"
-            f"💡 **Dicas:**\n"
-            f"• Seja específico e detalhado\n"
-            f"• Mencione localização exata\n"
-            f"• Indique urgência se necessário\n"
-            f"• Mínimo 10 caracteres",
-            parse_mode='Markdown'
-        )
-    
-    async def _processar_anomalia_descricao(self, update: Update, texto: str, operador: dict):
-        """Processa descrição da anomalia"""
-        user_id = str(update.effective_user.id)
-        estado = self.estados_conversa.get(user_id)
-        
-        if not estado or estado.get('acao') != 'anomalia':
-            return
-        
-        # Validar descrição
-        if len(texto.strip()) < 10:
-            await update.message.reply_text(
-                "❌ **Descrição muito curta**\n\n"
-                "A descrição deve ter pelo menos 10 caracteres.\n"
-                "Seja mais específico sobre a anomalia:"
-            )
-            return
-        
-        if len(texto.strip()) > 500:
-            await update.message.reply_text(
-                "❌ **Descrição muito longa**\n\n"
-                "Máximo 500 caracteres. Seja mais conciso:"
-            )
-            return
-        
-        # Salvar anomalia
-        sucesso = await self._salvar_anomalia({
-            'equipamento_id': estado['equipamento_id'],
-            'descricao': texto.strip(),
-            'operador': operador,
-            'data': timezone.now()
-        })
-        
-        # Limpar estado
-        if user_id in self.estados_conversa:
-            del self.estados_conversa[user_id]
-        
-        if sucesso:
-            await update.message.reply_text(
-                f"✅ **Anomalia Registrada!**\n\n"
-                f"🔧 Equipamento: {estado['equipamento_id']}\n"
-                f"📝 Descrição: {texto[:100]}...\n"
-                f"👤 Operador: {operador['nome']}\n"
-                f"📅 Data: {timezone.now().strftime('%d/%m/%Y %H:%M')}\n\n"
-                f"🚨 **A equipe de manutenção foi notificada!**",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text("❌ Erro ao registrar anomalia")
-    
-    async def _salvar_anomalia(self, dados: dict) -> bool:
-        """Salva anomalia no banco"""
-        try:
-            # TODO: Implementar salvamento real
-            logger.info(f"Anomalia salva: {dados}")
-            return True
-        except Exception as e:
-            logger.error(f"Erro ao salvar anomalia: {e}")
-            return False
-    
-    # ================================================================
-    # HORÍMETRO
-    # ================================================================
-    
-    async def _iniciar_horimetro(self, query, data: str, operador: dict):
-        """Inicia atualização de horímetro"""
-        equipamento_id = int(data.split('_')[1])
-        user_id = str(query.from_user.id)
-        
-        # Buscar horímetro atual
-        horimetro_atual = await self._buscar_horimetro_atual(equipamento_id)
-        
-        self.estados_conversa[user_id] = {
-            'acao': 'horimetro',
-            'equipamento_id': equipamento_id,
-            'horimetro_atual': horimetro_atual,
-            'etapa': 'novo_valor'
-        }
-        
-        await query.edit_message_text(
-            f"⏱️ **Atualização de Horímetro**\n\n"
-            f"🔧 Equipamento: {equipamento_id}\n"
-            f"📊 Horímetro atual: {horimetro_atual}h\n"
-            f"📅 Data: {timezone.now().strftime('%d/%m/%Y %H:%M')}\n"
-            f"👤 Operador: {operador['nome']}\n\n"
-            f"📝 **Digite o novo valor do horímetro:**\n"
-            f"Exemplo: {horimetro_atual + 8} (para 8 horas de trabalho)\n\n"
-            f"⚠️ **Atenção:** O novo valor deve ser maior que {horimetro_atual}h",
-            parse_mode='Markdown'
-        )
-    
-    async def _processar_horimetro_valor(self, update: Update, texto: str, operador: dict):
-        """Processa novo valor do horímetro"""
-        user_id = str(update.effective_user.id)
-        estado = self.estados_conversa.get(user_id)
-        
-        if not estado or estado.get('acao') != 'horimetro':
-            return
-        
-        try:
-            novo_valor = float(texto.replace(',', '.'))
-            horimetro_atual = estado['horimetro_atual']
-            
-            if novo_valor <= horimetro_atual:
-                await update.message.reply_text(
-                    f"❌ **Valor inválido**\n\n"
-                    f"O novo valor ({novo_valor}h) deve ser maior que o atual ({horimetro_atual}h).\n\n"
-                    f"Digite um valor maior que {horimetro_atual}h:"
-                )
-                return
-            
-            if novo_valor > horimetro_atual + 24:
-                await update.message.reply_text(
-                    f"⚠️ **Valor muito alto**\n\n"
-                    f"Diferença de {novo_valor - horimetro_atual}h parece muito alta.\n"
-                    f"Confirme o valor ou digite um valor menor:"
-                )
-                return
-            
-        except ValueError:
-            await update.message.reply_text(
-                "❌ **Formato inválido**\n\n"
-                "Digite apenas números (ex: 1250.5):"
-            )
-            return
-        
-        # Salvar horímetro
-        sucesso = await self._salvar_horimetro({
-            'equipamento_id': estado['equipamento_id'],
-            'valor_anterior': horimetro_atual,
-            'valor_novo': novo_valor,
-            'diferenca': novo_valor - horimetro_atual,
-            'operador': operador,
-            'data': timezone.now()
-        })
-        
-        # Limpar estado
-        if user_id in self.estados_conversa:
-            del self.estados_conversa[user_id]
-        
-        if sucesso:
-            await update.message.reply_text(
-                f"✅ **Horímetro Atualizado!**\n\n"
-                f"🔧 Equipamento: {estado['equipamento_id']}\n"
-                f"📊 Valor anterior: {horimetro_atual}h\n"
-                f"📈 Valor novo: {novo_valor}h\n"
-                f"⏰ Horas trabalhadas: {novo_valor - horimetro_atual}h\n"
-                f"👤 Operador: {operador['nome']}\n"
-                f"📅 Data: {timezone.now().strftime('%d/%m/%Y %H:%M')}\n\n"
-                f"💾 **Registro salvo com sucesso!**",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text("❌ Erro ao atualizar horímetro")
-    
-    async def _buscar_horimetro_atual(self, equipamento_id: int) -> float:
-        """Busca horímetro atual do equipamento"""
-        try:
-            # TODO: Implementar busca real no banco
-            # Por enquanto, simular valor
-            return 1200.5
-        except Exception:
-            return 0.0
-    
-    async def _salvar_horimetro(self, dados: dict) -> bool:
-        """Salva atualização de horímetro"""
-        try:
-            # TODO: Implementar salvamento real
-            logger.info(f"Horímetro salvo: {dados}")
-            return True
-        except Exception as e:
-            logger.error(f"Erro ao salvar horímetro: {e}")
-            return False
-    
-    # ================================================================
-    # RELATÓRIOS
-    # ================================================================
-    
-    async def _iniciar_relatorio(self, query, data: str, operador: dict):
-        """Inicia visualização de relatório"""
-        equipamento_id = int(data.split('_')[1])
-        
-        # Verificar se é supervisor
-        if operador['tipo'] != 'supervisor':
-            await query.edit_message_text(
-                "🚫 **Acesso Restrito**\n\n"
-                "Apenas supervisores podem acessar relatórios.\n\n"
-                "Entre em contato com seu supervisor se precisar desta informação."
-            )
-            return
-        
-        # Gerar relatório
-        relatorio = await self._gerar_relatorio_equipamento(equipamento_id)
-        
-        texto_relatorio = (
-            f"📊 **Relatório do Equipamento {equipamento_id}**\n\n"
-            f"📅 **Período:** Últimos 30 dias\n"
-            f"📈 **Estatísticas:**\n"
-            f"• Checklists realizados: {relatorio.get('checklists', 0)}\n"
-            f"• Abastecimentos: {relatorio.get('abastecimentos', 0)}\n"
-            f"• Anomalias reportadas: {relatorio.get('anomalias', 0)}\n"
-            f"• Horas operadas: {relatorio.get('horas_operadas', 0)}h\n\n"
-            f"🔧 **Status Atual:**\n"
-            f"• Horímetro: {relatorio.get('horimetro_atual', 0)}h\n"
-            f"• Último checklist: {relatorio.get('ultimo_checklist', 'N/A')}\n"
-            f"• Último abastecimento: {relatorio.get('ultimo_abastecimento', 'N/A')}\n\n"
-            f"📋 **Gerado em:** {timezone.now().strftime('%d/%m/%Y %H:%M')}\n"
-            f"👤 **Por:** {operador['nome']}"
-        )
-        
-        await query.edit_message_text(
-            texto_relatorio,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📄 Relatório Detalhado", callback_data=f'relatorio_detalhado_{equipamento_id}')],
-                [InlineKeyboardButton("🔙 Voltar", callback_data=f'menu_equipamento_{equipamento_id}')]
-            ])
-        )
-    
-    async def _gerar_relatorio_equipamento(self, equipamento_id: int) -> dict:
-        """Gera relatório do equipamento"""
-        try:
-            # TODO: Implementar busca real de dados
-            return {
-                'checklists': 15,
-                'abastecimentos': 8,
-                'anomalias': 2,
-                'horas_operadas': 240,
-                'horimetro_atual': 1200.5,
-                'ultimo_checklist': '20/07/2024',
-                'ultimo_abastecimento': '19/07/2024'
-            }
-        except Exception as e:
-            logger.error(f"Erro ao gerar relatório: {e}")
-            return {}
-    
-    # ================================================================
-    # HANDLER DE TEXTO ATUALIZADO
-    # ================================================================
-    
-    async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handler de texto ATUALIZADO para processar estados de conversa"""
-        user_id = str(update.effective_user.id)
-        texto = update.message.text.strip()
-        
-        # Verificar se usuário está em uma conversa específica
-        estado_conversa = self.estados_conversa.get(user_id)
-        
-        if estado_conversa:
-            sessao = self.user_sessions.get(user_id, {})
-            operador = sessao.get('operador')
-            
-            if not operador:
-                # Limpar estado se não estiver autenticado
-                del self.estados_conversa[user_id]
-                await update.message.reply_text("❌ Sessão expirada. Digite /start")
-                return
-            
-            # Processar baseado na ação atual
-            acao = estado_conversa.get('acao')
-            etapa = estado_conversa.get('etapa')
-            
-            if acao == 'abastecimento':
-                if etapa == 'quantidade':
-                    await self._processar_abastecimento_quantidade(update, texto, operador)
-                elif etapa == 'valor':
-                    await self._processar_abastecimento_valor(update, texto, operador)
-            
-            elif acao == 'anomalia':
-                if etapa == 'descricao':
-                    await self._processar_anomalia_descricao(update, texto, operador)
-            
-            elif acao == 'horimetro':
-                if etapa == 'novo_valor':
-                    await self._processar_horimetro_valor(update, texto, operador)
-            
-            return  # Não processar mais nada se estava em conversa
-        
-        # Se não está em conversa, usar handler original
-        await super().handle_text(update, context)
-
-# ================================================================
-# INSTÂNCIA GLOBAL
-# ================================================================
-
-# Atualizar a função get_bot para usar a versão estendida
-def get_bot_extended():
-    global _bot_instance
-    if _bot_instance is None:
-        _bot_instance = BotManagerExtendido()
-    return _bot_instance
-
-# ================================================================
-# HANDLERS GLOBAIS
-# ================================================================
-
-async def h_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await get_bot().start(update, context)
-
-async def h_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await get_bot().handle_text(update, context)
-
-async def h_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await get_bot().handle_photo(update, context)
-
-async def h_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await get_bot().handle_callback(update, context)
-
-async def h_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await get_bot().admin_command(update, context)
-
-async def h_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await get_bot().mostrar_ajuda(update)
-
-async def h_pular(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await get_bot().processar_data_nascimento(update, '/pular')
-
-# ================================================================
-# COMANDO DJANGO
-# ================================================================
 
 class Command(BaseCommand):
-    help = 'Bot Telegram Mandacaru'
+    help = 'Inicia o Bot Telegram do Mandacaru ERP com suporte a QR Code'
 
     def add_arguments(self, parser):
-        parser.add_argument('--debug', action='store_true', help='Debug')
-
-    def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('🤖 Iniciando Bot Mandacaru...'))
-
-        # Verificar token
-        token = getattr(settings, 'TELEGRAM_BOT_TOKEN', None)
-        if not token:
-            self.stdout.write(self.style.ERROR('❌ TELEGRAM_BOT_TOKEN não configurado'))
-            self.stdout.write('💡 Adicione no .env: TELEGRAM_BOT_TOKEN=seu_token')
-            return
-
-        # Verificar modelo
-        try:
-            total_ops = Operador.objects.count()
-            self.stdout.write(self.style.SUCCESS(f'✅ Operadores: {total_ops}'))
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'❌ Modelo: {e}'))
-            return
-
-        # Configurar logging simples
-        level = logging.DEBUG if options['debug'] else logging.INFO
-        logging.basicConfig(
-            level=level,
-            format='%(asctime)s - %(levelname)s - %(message)s'
+        parser.add_argument(
+            '--webhook',
+            action='store_true',
+            help='Usar webhook em vez de polling'
+        )
+        parser.add_argument(
+            '--port',
+            type=int,
+            default=8443,
+            help='Porta para o webhook (padrão: 8443)'
+        )
+        parser.add_argument(
+            '--debug',
+            action='store_true',
+            help='Modo debug com logs detalhados'
         )
 
+    def handle(self, *args, **options):
+        
+        
+        self.stdout.write(self.style.SUCCESS('=' * 60))
+        self.stdout.write(self.style.SUCCESS('🤖 INICIANDO BOT MANDACARU ERP'))
+        self.stdout.write(self.style.SUCCESS('=' * 60))
+        
+        # Verificar configurações
+        if not self._verificar_configuracoes():
+            return
+        
+        # Configurar logging
         if options['debug']:
-            self.stdout.write(self.style.WARNING('🔧 Debug ativado'))
-
-        # Status QR
-        if QR_AVAILABLE:
-            self.stdout.write(self.style.SUCCESS('✅ QR Code: Foto + Texto'))
+            logging.basicConfig(level=logging.DEBUG)
         else:
-            self.stdout.write(self.style.WARNING('⚠️ QR Code: Apenas texto'))
-
+            logging.basicConfig(level=logging.INFO)
+        
+        # Executar bot
         try:
-            asyncio.run(self.run_bot(token))
+            if options['webhook']:
+                self._executar_webhook(options['port'])
+            else:
+                self._executar_polling()
         except KeyboardInterrupt:
-            self.stdout.write(self.style.SUCCESS('\n🛑 Bot parado'))
+            self.stdout.write(self.style.WARNING('\\n⚠️ Bot interrompido pelo usuário'))
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'❌ Erro: {e}'))
+            self.stdout.write(self.style.ERROR(f'❌ Erro ao executar bot: {e}'))
+            raise
 
-    async def run_bot(self, token: str):
-        """Executa bot"""
-        self.stdout.write('🔧 Configurando...')
+    def _verificar_configuracoes(self):
         
-        # Criar aplicação
-        app = Application.builder().token(token).build()
         
-        # Handlers
-        app.add_handler(CommandHandler("start", h_start))
-        app.add_handler(CommandHandler("admin", h_admin))
-        app.add_handler(CommandHandler("help", h_help))
-        app.add_handler(CommandHandler("pular", h_pular))
+        self.stdout.write('🔍 Verificando configurações...')
         
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, h_text))
-        
-        if QR_AVAILABLE:
-            app.add_handler(MessageHandler(filters.PHOTO, h_photo))
-        
-        app.add_handler(CallbackQueryHandler(h_callback))
-        
-        self.stdout.write('✅ Configurado!')
-        self.stdout.write('📱 Teste no Telegram: /start')
-        self.stdout.write('🛑 Ctrl+C para parar')
-        
-        # Inicializar aplicação
-        try:
-            await app.initialize()
-            await app.start()
-            await app.updater.start_polling()
-            
-            # Manter rodando até interrupção
-            while True:
-                await asyncio.sleep(1)
-                
-        except KeyboardInterrupt:
-            self.stdout.write('\n🛑 Parando bot...')
-        finally:
-            # Limpeza
-            try:
-                await app.updater.stop()
-                await app.stop()
-                await app.shutdown()
-            except Exception:
-                pass
-
-# ================================================================
-# VERSÃO ALTERNATIVA PARA WINDOWS (se ainda der problema)
-# ================================================================
-
-class CommandWindows(BaseCommand):
-    help = 'Bot Telegram Mandacaru - Versão Windows'
-
-    def add_arguments(self, parser):
-        parser.add_argument('--debug', action='store_true', help='Debug')
-
-    def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('🤖 Iniciando Bot Mandacaru (Windows)...'))
-
-        # Verificar token
+        # Token do bot
         token = getattr(settings, 'TELEGRAM_BOT_TOKEN', None)
         if not token:
-            self.stdout.write(self.style.ERROR('❌ TELEGRAM_BOT_TOKEN não configurado'))
-            return
-
-        # Verificar modelo
+            self.stdout.write(self.style.ERROR('❌ TELEGRAM_BOT_TOKEN não configurado!'))
+            self.stdout.write('   Configure no arquivo .env')
+            return False
+        
+        self.stdout.write(f'✅ Token configurado: ...{token[-10:]}')
+        
+        # Verificar modelos
         try:
-            total_ops = Operador.objects.count()
-            self.stdout.write(self.style.SUCCESS(f'✅ Operadores: {total_ops}'))
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'❌ Modelo: {e}'))
-            return
-
-        # Status QR
-        if QR_AVAILABLE:
-            self.stdout.write(self.style.SUCCESS('✅ QR Code: Foto + Texto'))
-        else:
-            self.stdout.write(self.style.WARNING('⚠️ QR Code: Apenas texto'))
-
-        # Configurar event loop para Windows
-        if os.name == 'nt':  # Windows
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-
-        try:
-            # Criar novo event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            total_operadores = Operador.objects.filter(status='ATIVO').count()
+            total_equipamentos = Equipamento.objects.filter(ativo_nr12=True).count()
             
-            # Executar bot
-            loop.run_until_complete(self.run_bot_windows(token))
-        except KeyboardInterrupt:
-            self.stdout.write(self.style.SUCCESS('\n🛑 Bot parado'))
+            self.stdout.write(f'✅ Operadores ativos: {total_operadores}')
+            self.stdout.write(f'✅ Equipamentos NR12: {total_equipamentos}')
+            
+            if total_operadores == 0:
+                self.stdout.write(self.style.WARNING('⚠️ Nenhum operador ativo encontrado'))
+                self.stdout.write('   Execute: python manage.py criar_operadores_demo')
+            
+            if total_equipamentos == 0:
+                self.stdout.write(self.style.WARNING('⚠️ Nenhum equipamento NR12 encontrado'))
+                self.stdout.write('   Execute: python manage.py setup_nr12')
+                
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'❌ Erro: {e}'))
-        finally:
-            # Fechar loop
-            try:
-                loop.close()
-            except Exception:
-                pass
+            self.stdout.write(self.style.ERROR(f'❌ Erro ao verificar modelos: {e}'))
+            return False
+        
+        # Verificar dependências
+        try:
+            import cv2
+            import pyzbar
+            self.stdout.write('✅ Bibliotecas de QR Code instaladas')
+        except ImportError as e:
+            self.stdout.write(self.style.WARNING('⚠️ Bibliotecas de QR Code não instaladas'))
+            self.stdout.write('   Execute: pip install pyzbar opencv-python')
+        
+        return True
 
-    async def run_bot_windows(self, token: str):
-        """Executa bot no Windows"""
-        self.stdout.write('🔧 Configurando para Windows...')
+    def _executar_polling(self):
+        
+        
+        self.stdout.write(self.style.SUCCESS('\\n🚀 Iniciando bot em modo POLLING...'))
         
         # Criar aplicação
-        app = Application.builder().token(token).build()
+        app = self._criar_aplicacao()
         
-        # Handlers
-        app.add_handler(CommandHandler("start", h_start))
-        app.add_handler(CommandHandler("admin", h_admin))
-        app.add_handler(CommandHandler("help", h_help))
-        app.add_handler(CommandHandler("pular", h_pular))
+        # Informações
+        self.stdout.write(self.style.SUCCESS('\\n✅ Bot iniciado com sucesso!'))
+        self.stdout.write('\\n📱 FUNCIONALIDADES DISPONÍVEIS:')
+        self.stdout.write('   • Leitura de QR Code (fotos)')
+        self.stdout.write('   • Login de operadores')
+        self.stdout.write('   • Checklist NR12')
+        self.stdout.write('   • Registro de abastecimentos')
+        self.stdout.write('   • Reporte de anomalias')
+        self.stdout.write('\\n💡 Pressione Ctrl+C para parar\\n')
         
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, h_text))
+        # Executar
+        app.run_polling(allowed_updates=['message', 'callback_query'])
+
+    def _executar_webhook(self, port):
+    
         
-        if QR_AVAILABLE:
-            app.add_handler(MessageHandler(filters.PHOTO, h_photo))
+        webhook_url = getattr(settings, 'TELEGRAM_WEBHOOK_URL', None)
+        if not webhook_url:
+            self.stdout.write(self.style.ERROR('❌ TELEGRAM_WEBHOOK_URL não configurado!'))
+            return
         
-        app.add_handler(CallbackQueryHandler(h_callback))
+        self.stdout.write(self.style.SUCCESS(f'\\n🚀 Iniciando bot em modo WEBHOOK...'))
+        self.stdout.write(f'   URL: {webhook_url}')
+        self.stdout.write(f'   Porta: {port}')
         
-        self.stdout.write('✅ Configurado!')
-        self.stdout.write('📱 Teste no Telegram: /start')
-        self.stdout.write('🛑 Ctrl+C para parar')
+        # Criar aplicação
+        app = self._criar_aplicacao()
         
-        # Usar run_polling que gerencia o ciclo de vida automaticamente
-        await app.run_polling(
-            poll_interval=1.0,
-            timeout=10,
-            drop_pending_updates=True,
-            close_loop=False  # Não fechar o loop automaticamente
+        # Executar
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=f"/{settings.TELEGRAM_BOT_TOKEN}",
+            webhook_url=f"{webhook_url}/{settings.TELEGRAM_BOT_TOKEN}",
+            allowed_updates=['message', 'callback_query']
         )
+
+    def _criar_aplicacao(self):
+        """Cria aplicação do bot com handlers atualizados"""
+        # Criar aplicação
+        app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
+        
+        # Comandos principais
+        app.add_handler(CommandHandler('start', self._cmd_start))
+        app.add_handler(CommandHandler('help', self._cmd_help))
+        app.add_handler(CommandHandler('status', self._cmd_status))
+        app.add_handler(CommandHandler('logout', self._cmd_logout))
+        app.add_handler(CommandHandler('admin', self._cmd_admin))
+        
+        # Handlers de conteúdo com prioridade
+        app.add_handler(MessageHandler(filters.PHOTO, handle_qr_photo), group=0)
+        app.add_handler(text_handler, group=1)  # Usar o handler atualizado
+        app.add_handler(callback_handler)       # Usar o handler atualizado
+        
+        # Error handler
+        app.add_handler(self._error_handler)
+        
+        return app
+
+    # ========================================
+    # COMANDOS DO BOT
+    # ========================================
+    
+    async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        
+        user_name = update.effective_user.first_name
+        chat_id = str(update.effective_chat.id)
+        session = get_session(chat_id)
+        
+        if session and session.get('autenticado'):
+            # Usuário já autenticado
+            operador_nome = session.get('operador_nome', 'Operador')
+            await update.message.reply_text(
+                f"👋 Olá novamente, {operador_nome}!\\n\\n"
+                f"📷 Escaneie o QR Code de um equipamento para continuar.\\n\\n"
+                f"Ou use:\\n"
+                f"/status - Ver seu status\\n"
+                f"/logout - Sair do sistema\\n"
+                f"/help - Ajuda"
+            )
+        else:
+            # Novo usuário
+            await update.message.reply_text(
+                f"👋 Bem-vindo ao Mandacaru ERP, {user_name}!\\n\\n"
+                f"🤖 Sou o assistente virtual que vai ajudá-lo com:\\n"
+                f"• Checklists NR12\\n"
+                f"• Registro de abastecimentos\\n"
+                f"• Reporte de anomalias\\n"
+                f"• Consulta de históricos\\n\\n"
+                f"📷 **Para começar:**\\n"
+                f"Envie uma foto do QR Code do seu cartão de operador.\\n\\n"
+                f"💡 Não tem o QR Code? Entre em contato com seu supervisor."
+            )
+
+    async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        
+        await update.message.reply_text(
+            "📚 **AJUDA - Bot Mandacaru ERP**\\n\\n"
+            "🔹 **Como usar:**\\n"
+            "1. Escaneie o QR do seu cartão (login)\\n"
+            "2. Escaneie o QR de um equipamento\\n"
+            "3. Escolha a ação desejada\\n\\n"
+            "🔹 **Comandos disponíveis:**\\n"
+            "/start - Iniciar bot\\n"
+            "/status - Ver seu status\\n"
+            "/logout - Sair do sistema\\n"
+            "/help - Esta mensagem\\n\\n"
+            "🔹 **Dicas para QR Code:**\\n"
+            "• Boa iluminação\\n"
+            "• Câmera estável\\n"
+            "• QR Code limpo\\n"
+            "• Distância adequada\\n\\n"
+            "❓ Problemas? Contate seu supervisor."
+        )
+
+    async def _cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+        
+        chat_id = str(update.effective_chat.id)
+        session = get_session(chat_id)
+        
+        if not session or not session.get('autenticado'):
+            await update.message.reply_text(
+                "❌ Você não está autenticado.\\n\\n"
+                "📷 Escaneie o QR Code do seu cartão para fazer login."
+            )
+            return
+        
+        # Buscar dados do operador
+        try:
+            from asgiref.sync import sync_to_async
+            
+            operador_id = session.get('operador_id')
+            operador = await sync_to_async(Operador.objects.get)(id=operador_id)
+            
+            # Estatísticas
+            hoje = datetime.now().date()
+            checklists_hoje = await sync_to_async(
+                ChecklistNR12.objects.filter(
+                    operador=operador,
+                    data_checklist=hoje
+                ).count
+            )()
+            
+            await update.message.reply_text(
+                f"📊 **SEU STATUS**\\n\\n"
+                f"👤 Nome: {operador.nome}\\n"
+                f"💼 Função: {operador.funcao}\\n"
+                f"🏢 Setor: {operador.setor}\\n"
+                f"📅 Admissão: {operador.data_admissao.strftime('%d/%m/%Y')}\\n\\n"
+                f"📈 **Hoje:**\\n"
+                f"✅ Checklists realizados: {checklists_hoje}\\n\\n"
+                f"🔐 Sessão ativa desde: {session.get('ultimo_acesso', 'N/A')}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Erro ao buscar status: {e}")
+            await update.message.reply_text(
+                "❌ Erro ao buscar seus dados.\\n"
+                "Tente novamente mais tarde."
+            )
+
+    async def _cmd_logout(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+        
+        chat_id = str(update.effective_chat.id)
+        session = get_session(chat_id)
+        
+        if session and session.get('autenticado'):
+            nome = session.get('operador_nome', 'Operador')
+            clear_session(chat_id)
+            
+            await update.message.reply_text(
+                f"👋 Logout realizado com sucesso!\\n\\n"
+                f"Até logo, {nome}!\\n\\n"
+                f"Para usar novamente, escaneie seu QR Code."
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Você não está autenticado."
+            )
+
+    async def _cmd_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+        
+        user_id = str(update.effective_user.id)
+        admin_ids = getattr(settings, 'ADMIN_IDS', [])
+        
+        if user_id not in admin_ids:
+            await update.message.reply_text(
+                "❌ Acesso negado.\\n"
+                "Este comando é apenas para administradores."
+            )
+            return
+        
+        # Menu administrativo
+        keyboard = [
+            [InlineKeyboardButton("📊 Estatísticas", callback_data="admin_stats")],
+            [InlineKeyboardButton("👥 Operadores Online", callback_data="admin_users")],
+            [InlineKeyboardButton("🔄 Limpar Cache", callback_data="admin_clear_cache")],
+            [InlineKeyboardButton("📋 Logs Recentes", callback_data="admin_logs")],
+            [InlineKeyboardButton("🔧 Status Sistema", callback_data="admin_system")],
+            [InlineKeyboardButton("❌ Fechar", callback_data="admin_close")]
+        ]
+        
+        await update.message.reply_text(
+            "🔧 **PAINEL ADMINISTRATIVO**\\n\\n"
+            "Selecione uma opção:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    async def _error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
+    
+        
+        logger.error(f"Erro no update {update}: {context.error}")
+        
+        # Tentar notificar o usuário
+        if update and hasattr(update, 'effective_message'):
+            try:
+                await update.effective_message.reply_text(
+                    "❌ Ocorreu um erro ao processar sua solicitação.\\n"
+                    "Por favor, tente novamente.\\n\\n"
+                    "Se o problema persistir, contate o suporte."
+                )
+            except Exception as e:
+                logger.error(f"Erro ao enviar mensagem de erro: {e}")
+        
+        # Notificar admins em erros críticos
+        if isinstance(context.error, Exception):
+            error_message = f"🚨 ERRO NO BOT:\\n{type(context.error).__name__}: {str(context.error)}"
+            admin_ids = getattr(settings, 'ADMIN_IDS', [])
+            
+            for admin_id in admin_ids:
+                try:
+                    await context.bot.send_message(
+                        chat_id=admin_id,
+                        text=error_message
+                    )
+                except:
+                    pass
+
+    # ========================================
+    # CALLBACKS ADMINISTRATIVOS
+    # ========================================
+    
+    async def _handle_admin_callback(self, query, data):
+    
+        
+        from asgiref.sync import sync_to_async
+        from backend.apps.bot_telegram.utils.sessions import _memory_sessions
+        
+        try:
+            if data == "admin_stats":
+                # Estatísticas gerais
+                total_operadores = await sync_to_async(Operador.objects.filter(status='ATIVO').count)()
+                total_equipamentos = await sync_to_async(Equipamento.objects.filter(ativo_nr12=True).count)()
+                
+                hoje = datetime.now().date()
+                checklists_hoje = await sync_to_async(
+                    ChecklistNR12.objects.filter(data_checklist=hoje).count
+                )()
+                checklists_concluidos = await sync_to_async(
+                    ChecklistNR12.objects.filter(
+                        data_checklist=hoje,
+                        status='CONCLUIDO'
+                    ).count
+                )()
+                
+                # Sessões ativas
+                sessoes_ativas = len([s for s in _memory_sessions.values() 
+                                    if s.get('autenticado')])
+                
+                await query.edit_message_text(
+                    f"📊 **ESTATÍSTICAS DO SISTEMA**\\n\\n"
+                    f"👥 Operadores ativos: {total_operadores}\\n"
+                    f"🔧 Equipamentos NR12: {total_equipamentos}\\n\\n"
+                    f"📅 **HOJE ({hoje.strftime('%d/%m/%Y')}):**\\n"
+                    f"📋 Checklists criados: {checklists_hoje}\\n"
+                    f"✅ Checklists concluídos: {checklists_concluidos}\\n"
+                    f"📱 Usuários online: {sessoes_ativas}\\n\\n"
+                    f"🕐 Atualizado: {datetime.now().strftime('%H:%M:%S')}"
+                )
+                
+            elif data == "admin_users":
+                # Usuários online
+                usuarios_online = []
+                for chat_id, session in _memory_sessions.items():
+                    if session.get('autenticado'):
+                        usuarios_online.append(
+                            f"• {session.get('operador_nome', 'N/A')} "
+                            f"({session.get('operador_codigo', 'N/A')})"
+                        )
+                
+                if usuarios_online:
+                    lista = "\\n".join(usuarios_online[:20])  # Limitar a 20
+                    texto = f"👥 **USUÁRIOS ONLINE ({len(usuarios_online)}):**\\n\\n{lista}"
+                    if len(usuarios_online) > 20:
+                        texto += f"\\n\\n... e mais {len(usuarios_online) - 20} usuários"
+                else:
+                    texto = "👥 Nenhum usuário online no momento."
+                
+                await query.edit_message_text(texto)
+                
+            elif data == "admin_clear_cache":
+                # Limpar cache/sessões
+                sessoes_limpas = len(_memory_sessions)
+                _memory_sessions.clear()
+                
+                await query.edit_message_text(
+                    f"🔄 **CACHE LIMPO**\\n\\n"
+                    f"✅ {sessoes_limpas} sessões removidas\\n"
+                    f"✅ Memória liberada\\n\\n"
+                    f"⚠️ Todos os usuários precisarão fazer login novamente."
+                )
+                
+            elif data == "admin_logs":
+                # Logs recentes (simulado)
+                await query.edit_message_text(
+                    "📋 **LOGS RECENTES**\\n\\n"
+                    "Para logs completos, verifique:\\n"
+                    "• Arquivo: `logs/bot.log`\\n"
+                    "• Console do servidor\\n"
+                    "• Django Admin\\n\\n"
+                    "Use: `tail -f logs/bot.log`"
+                )
+                
+            elif data == "admin_system":
+                # Status do sistema
+                import psutil
+                import platform
+                
+                # Informações do sistema
+                cpu_percent = psutil.cpu_percent(interval=1)
+                memory = psutil.virtual_memory()
+                disk = psutil.disk_usage('/')
+                
+                # Uptime do bot (simulado)
+                uptime = datetime.now() - datetime.now().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                
+                await query.edit_message_text(
+                    f"🔧 **STATUS DO SISTEMA**\\n\\n"
+                    f"🖥️ **Servidor:**\\n"
+                    f"• OS: {platform.system()} {platform.release()}\\n"
+                    f"• Python: {platform.python_version()}\\n"
+                    f"• Django: {settings.VERSION if hasattr(settings, 'VERSION') else 'N/A'}\\n\\n"
+                    f"📊 **Recursos:**\\n"
+                    f"• CPU: {cpu_percent}%\\n"
+                    f"• RAM: {memory.percent}% ({memory.used // (1024**3)}GB/{memory.total // (1024**3)}GB)\\n"
+                    f"• Disco: {disk.percent}% usado\\n\\n"
+                    f"⏱️ **Uptime:** {str(uptime).split('.')[0]}"
+                )
+                
+            elif data == "admin_close":
+                await query.edit_message_text("✅ Painel administrativo fechado.")
+                
+        except Exception as e:
+            logger.error(f"Erro no callback admin: {e}")
+            await query.edit_message_text(
+                f"❌ Erro ao processar comando administrativo:\\n{str(e)}"
+            )
+
+    # ========================================
+    # MÉTODOS AUXILIARES
+    # ========================================
+    
+    def _formatar_tempo(self, segundos):
+        
+        horas = segundos // 3600
+        minutos = (segundos % 3600) // 60
+        segundos = segundos % 60
+        
+        if horas > 0:
+            return f"{horas}h {minutos}m"
+        elif minutos > 0:
+            return f"{minutos}m {segundos}s"
+        else:
+            return f"{segundos}s"
+    
+    def _verificar_horario_trabalho(self):
+    
+        agora = datetime.now()
+        hora = agora.hour
+        dia_semana = agora.weekday()  # 0=Segunda, 6=Domingo
+        
+        # Segunda a Sexta, 6h às 22h
+        if dia_semana < 5:  # Dias úteis
+            return 6 <= hora < 22
+        # Sábado, 6h às 18h
+        elif dia_semana == 5:
+            return 6 <= hora < 18
+        # Domingo - fechado
+        else:
+            return False
+
+
+# ================================================================
+# EXEMPLO DE USO E TESTES
+# ================================================================
+
+
+
+    
+    import sys
+    import os
+    
+    # Adicionar o diretório raiz ao path
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
+    
+    # Configurar Django
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+    import django
+    django.setup()
+    
+    # Executar comando
+    from django.core.management import execute_from_command_line
+    #execute_from_command_line(['manage.py', 'start_telegram_bot', '--debug'])

@@ -69,15 +69,33 @@ class Operador(models.Model):
     observacoes = models.TextField(blank=True)
     
     # QR Code
-    qr_code = models.ImageField(upload_to='operadores/qrcodes/', blank=True, null=True)
-    qr_code_data = models.CharField(max_length=100, unique=True, editable=False)
-    
+    qr_code = models.ImageField(
+        upload_to='qr_codes/operadores/', 
+        blank=True, 
+        null=True,
+        verbose_name='QR Code do Operador'
+    )
     # Controle
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True
+    )
+
+    qr_code = models.ImageField(
+        upload_to='qr_codes/operadores/', 
+        blank=True, 
+        null=True,
+        verbose_name='QR Code do Operador'
+    )
+    qr_code_data = models.CharField(
+        max_length=100, 
+        unique=True, 
+        editable=False,
+        blank=True,
+        null=True,
+        help_text='Dados únicos para identificação do QR Code'
     )
 
     # Vínculos com sistema
@@ -118,7 +136,7 @@ class Operador(models.Model):
 
     # Bot Telegram
     ultimo_acesso_bot = models.DateTimeField(null=True, blank=True)
-    chat_id_telegram = models.CharField(max_length=50, blank=True, unique=True)
+    chat_id_telegram = models.CharField(max_length=50, blank=True, null=True, unique=True)  # Adicionei null=True
     ativo_bot = models.BooleanField(default=True, help_text='Pode usar o bot do Telegram')
 
     # Localização e uso
@@ -160,48 +178,51 @@ class Operador(models.Model):
         return f"OP{numero:04d}"
 
     def gerar_qr_code(self):
-        """Gera QR code para identificação do operador"""
-        qr = qrcode.QRCode(
-            version=1, 
-            error_correction=qrcode.constants.ERROR_CORRECT_L, 
-            box_size=10, 
-            border=4
-        )
+        """Gera QR code usando o gerenciador unificado padronizado"""
+        from backend.apps.shared.qr_manager import UnifiedQRManager
         
-        # ✅ DADOS PADRONIZADOS PARA BOT
-        qr_data = {
-            'tipo': 'operador',
-            'codigo': self.codigo,
-            'nome': self.nome,
-            'data': self.qr_code_data
-        }
-        
-        qr.add_data(json.dumps(qr_data))
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white").resize((250, 250))
-
-        # Criar imagem final com informações
-        final_img = Image.new('RGB', (300, 350), 'white')
-        final_img.paste(qr_img, (25, 25))
-        
-        draw = ImageDraw.Draw(final_img)
         try:
-            font = ImageFont.truetype("arial.ttf", 14)
-        except:
-            font = ImageFont.load_default()
-        
-        draw.text((25, 285), f"{self.codigo}\n{self.nome[:25]}", fill="black", font=font)
-
-        buffer = BytesIO()
-        final_img.save(buffer, format='PNG')
-        buffer.seek(0)
-        
-        self.qr_code.save(
-            f'operador_{self.codigo}_qr.png', 
-            File(buffer), 
-            save=False
-        )
-        self.save(update_fields=['qr_code'])
+            qr_manager = UnifiedQRManager()
+            qr_info = qr_manager.gerar_qr_operador(self, 'medium')
+            
+            # Atualizar campo com caminho relativo padronizado
+            self.qr_code = qr_info['relative_path']
+            self.save(update_fields=['qr_code'])
+            
+            return qr_info
+            
+        except Exception as e:
+            # Fallback para método antigo em caso de erro
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao gerar QR code padronizado para {self.codigo}: {e}")
+            
+            # Método simplificado de backup
+            import qrcode
+            import json
+            from io import BytesIO
+            from django.core.files.base import ContentFile
+            
+            qr_data = {
+                'tipo': 'operador',
+                'codigo': self.codigo,
+                'nome': self.nome,
+                'data': self.qr_code_data
+            }
+            
+            qr = qrcode.QRCode(version=1, box_size=8, border=4)
+            qr.add_data(json.dumps(qr_data))
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            
+            buffer = BytesIO()
+            qr_img.save(buffer, format='PNG')
+            
+            filename = f'op_{self.codigo}_medium.png'
+            self.qr_code.save(filename, ContentFile(buffer.getvalue()), save=False)
+            self.save(update_fields=['qr_code'])
+            
+            return {'filename': filename, 'status': 'fallback'}
 
     # ✅ MÉTODOS CRÍTICOS PARA BOT
 

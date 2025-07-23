@@ -1,23 +1,24 @@
-import cv2
+# backend/apps/bot_telegram/utils/qr_utils.py
 import json
+from pyzbar import decode
+from PIL import Image
 
-def ler_qr_code(caminho_imagem):
+def ler_qr_code(image_path):
+    """Lê QR code de uma imagem"""
     try:
-        imagem = cv2.imread(str(caminho_imagem))
-        if imagem is None:
-            print(f"[QR ERRO] Imagem não encontrada: {caminho_imagem}")
-            return None
-
-        detector = cv2.QRCodeDetector()
-        dados, _, _ = detector.detectAndDecode(imagem)
-        if dados:
-            return json.loads(dados)
-        else:
-            print("[QR ERRO] Nenhum dado detectado no QR Code.")
-            return None
-    except json.JSONDecodeError as e:
-        print(f"[QR ERRO] Falha ao decodificar JSON: {e}")
-        return None
+        image = Image.open(image_path)
+        decoded_objects = decode(image)
+        
+        for obj in decoded_objects:
+            qr_data = obj.data.decode('utf-8')
+            
+            # Tentar como JSON
+            try:
+                return json.loads(qr_data)
+            except:
+                # Retornar como string
+                return {"codigo": qr_data}
+                
     except Exception as e:
-        print(f"[QR ERRO] Erro inesperado: {e}")
+        print(f"Erro ao ler QR: {e}")
         return None
