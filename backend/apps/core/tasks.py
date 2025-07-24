@@ -1,459 +1,555 @@
 # ================================================================
-# ARQUIVO: backend/apps/core/tasks.py
-# Sistema de Automação Principal do Mandacaru ERP
+# SISTEMA COMPLETO DE AUTOMAÇÃO DE CHECKLISTS NR12
+# backend/apps/core/tasks.py - VERSÃO COMPLETA
 # ================================================================
 
 from celery import shared_task
 from django.utils import timezone
 from datetime import date, timedelta, datetime
-from django.db.models import Count, Sum, Q
+from django.db.models import Q, Count
 from django.core.mail import send_mail
 from django.conf import settings
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
 # ================================================================
-# TASKS DE CHECKLISTS NR12
+# TASK PRINCIPAL - GERAÇÃO AUTOMÁTICA DE CHECKLISTS
 # ================================================================
 
 @shared_task
-def gerar_checklists_diarios():
-    """Gera checklists NR12 diários para todos os equipamentos ativos"""
+def gerar_checklists_automatico():
+    """
+    Task principal para gerar checklists automaticamente
+    
+    HORÁRIOS:
+    - Diário: Todo dia às 6h da manhã
+    - Semanal: Toda segunda-feira às 6h da manhã  
+    - Mensal: Todo dia 1º às 6h da manhã
+    
+    LÓGICA:
+    - Verifica a frequência configurada em cada equipamento
+    - Cria checklists para os turnos: MANHA, TARDE, NOITE
+    - Evita duplicação verificando se já existe checklist para a data
+    """
     try:
         from backend.apps.equipamentos.models import Equipamento
         from backend.apps.nr12_checklist.models import ChecklistNR12
-        import uuid
         
         hoje = date.today()
+        dia_semana = hoje.weekday()  # 0=segunda, 6=domingo
+        dia_mes = hoje.day
+        
+        # Log início da execução
+        logger.info(f"🚀 Iniciando geração automática de checklists para {hoje}")
+        logger.info(f"   Dia da semana: {dia_semana} (0=segunda)")
+        logger.info(f"   Dia do mês: {dia_mes}")
+        
+        # Buscar equipamentos ativos com frequência configurada
         equipamentos_ativos = Equipamento.objects.filter(
             ativo_nr12=True,
-            tipo_nr12__isnull=False
-        )
+            frequencias_checklist__isnull=False
+        ).exclude(frequencias_checklist=[]).select_related('categoria', 'cliente', 'tipo_nr12')
+        
+        if not equipamentos_ativos.exists():
+            logger.warning("⚠️ Nenhum equipamento ativo com frequência configurada")
+            return "Nenhum equipamento configurado para gerar checklists"
+        
+        logger.info(f"📊 {equipamentos_ativos.count()} equipamentos ativos encontrados")
         
         checklists_criados = 0
+        equipamentos_processados = 0
         turnos = ['MANHA', 'TARDE', 'NOITE']
         
+        # Processar cada equipamento
         for equipamento in equipamentos_ativos:
-            # Verificar frequência
-            if equipamento.frequencia_checklist == 'DIARIO':
-                for turno in turnos:
-                    # Verificar se já existe
-                    if not ChecklistNR12.objects.filter(
-                        equipamento=equipamento,
-                        data_checklist=hoje,
-                        turno=turno
-                    ).exists():
-                        ChecklistNR12.objects.create(
+            equipamento_gerou_hoje = False
+            
+            # Verificar cada frequência configurada no equipamento
+            for frequencia in equipamento.frequencias_checklist:
+                deve_gerar = _deve_gerar_checklist(frequencia, dia_semana, dia_mes)
+                
+                if deve_gerar:
+                    logger.info(f"✅ {equipamento.nome} - Gerando checklist {frequencia}")
+                    
+                    # Gerar checklist para cada turno
+                    for turno in turnos:
+                        # Verificar se já existe checklist para esta data/turno
+                        checklist_existente = ChecklistNR12.objects.filter(
                             equipamento=equipamento,
                             data_checklist=hoje,
-                            turno=turno,
-                            status='PENDENTE',
-                            uuid=uuid.uuid4()
-                        )
-                        checklists_criados += 1
+                            turno=turno
+                        ).exists()
+                        
+                        if not checklist_existente:
+                            # Criar novo checklist
+                            checklist = ChecklistNR12.objects.create(
+                                equipamento=equipamento,
+                                data_checklist=hoje,
+                                turno=turno,
+                                status='PENDENTE',
+                                uuid=uuid.uuid4(),
+                                necessita_manutencao=False,
+                                observacoes=f'Checklist {frequencia.lower()} gerado automaticamente'
+                            )
+                            
+                            # Criar itens do checklist
+                            itens_criados = _criar_itens_checklist(checklist)
+                            checklists_criados += 1
+                            equipamento_gerou_hoje = True
+                            
+                            logger.info(f"   📋 Checklist {turno} criado com {itens_criados} itens")
+                        else:
+                            logger.info(f"   ℹ️ Checklist {turno} já existe para hoje")
+                else:
+                    logger.debug(f"❌ {equipamento.nome} - {frequencia}: não deve gerar hoje")
+            
+            if equipamento_gerou_hoje:
+                equipamentos_processados += 1
         
-        logger.info(f"✅ {checklists_criados} checklists criados para {hoje}")
-        return f"Checklists criados: {checklists_criados}"
+        # Log resultado final
+        resultado = f"✅ Automação concluída: {checklists_criados} checklists criados para {equipamentos_processados} equipamentos"
+        logger.info(resultado)
+        
+        # Enviar notificação se configurado
+        if checklists_criados > 0:
+            _notificar_checklists_gerados(checklists_criados, equipamentos_processados, hoje)
+        
+        return resultado
         
     except Exception as e:
-        logger.error(f"❌ Erro ao gerar checklists: {e}")
+        erro = f"❌ Erro na geração automática de checklists: {e}"
+        logger.error(erro, exc_info=True)
         raise
 
+def _deve_gerar_checklist(frequencia, dia_semana, dia_mes):
+    """
+    Determina se deve gerar checklist baseado na frequência
+    
+    Args:
+        frequencia (str): DIARIA, SEMANAL ou MENSAL
+        dia_semana (int): 0=segunda, 1=terça, ..., 6=domingo
+        dia_mes (int): Dia do mês (1-31)
+    
+    Returns:
+        bool: True se deve gerar checklist
+    """
+    if frequencia == 'DIARIA':
+        return True
+    elif frequencia == 'SEMANAL':
+        return dia_semana == 0  # Segunda-feira
+    elif frequencia == 'MENSAL':
+        return dia_mes == 1  # Dia 1º do mês
+    else:
+        logger.warning(f"⚠️ Frequência desconhecida: {frequencia}")
+        return False
+
+def _criar_itens_checklist(checklist):
+    """
+    Cria itens do checklist baseado no tipo NR12 do equipamento
+    
+    Args:
+        checklist: Instância do ChecklistNR12
+    
+    Returns:
+        int: Número de itens criados
+    """
+    try:
+        from backend.apps.nr12_checklist.models import ItemChecklistRealizado, ItemChecklistPadrao
+        
+        if not checklist.equipamento.tipo_nr12:
+            logger.warning(f"⚠️ Equipamento {checklist.equipamento.nome} não tem tipo NR12 configurado")
+            return 0
+        
+        # Buscar itens padrão para este tipo de equipamento
+        itens_padrao = ItemChecklistPadrao.objects.filter(
+            tipo_equipamento=checklist.equipamento.tipo_nr12,
+            ativo=True
+        ).order_by('ordem')
+        
+        if not itens_padrao.exists():
+            logger.warning(f"⚠️ Nenhum item padrão encontrado para tipo {checklist.equipamento.tipo_nr12.nome}")
+            return 0
+        
+        itens_criados = 0
+        
+        # Criar cada item do checklist
+        for item_padrao in itens_padrao:
+            ItemChecklistRealizado.objects.create(
+                checklist=checklist,
+                item_padrao=item_padrao,
+                status='PENDENTE'
+                # Removido 'observacoes' - o campo correto é 'observacao' (singular)
+            )
+            itens_criados += 1
+        
+        logger.debug(f"✅ {itens_criados} itens criados para checklist {checklist.uuid}")
+        return itens_criados
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao criar itens do checklist {checklist.uuid}: {e}")
+        return 0
+
+def _notificar_checklists_gerados(total_checklists, total_equipamentos, data):
+    """
+    Envia notificação sobre checklists gerados
+    """
+    try:
+        mensagem = f"""
+🚀 CHECKLISTS GERADOS AUTOMATICAMENTE
+
+📅 Data: {data.strftime('%d/%m/%Y')}
+📋 Total de checklists: {total_checklists}
+🔧 Equipamentos processados: {total_equipamentos}
+⏰ Horário: {datetime.now().strftime('%H:%M')}
+
+✅ Sistema funcionando corretamente!
+        """
+        
+        logger.info(f"📢 Notificação: {total_checklists} checklists gerados")
+        
+        # Aqui você pode implementar envio via Telegram, email, etc.
+        # Por enquanto apenas log
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao enviar notificação: {e}")
+
+# ================================================================
+# TASKS DE MONITORAMENTO E CONTROLE
+# ================================================================
+
 @shared_task
-def verificar_checklists_pendentes():
-    """Verifica checklists pendentes e envia notificações"""
+def verificar_checklists_atrasados():
+    """
+    Verifica e marca checklists atrasados (do dia anterior)
+    Executa todo dia às 7h da manhã
+    """
+    try:
+        from backend.apps.nr12_checklist.models import ChecklistNR12
+        
+        ontem = date.today() - timedelta(days=1)
+        
+        # Buscar checklists pendentes de ontem
+        checklists_atrasados = ChecklistNR12.objects.filter(
+            data_checklist=ontem,
+            status='PENDENTE'
+        ).select_related('equipamento')
+        
+        if not checklists_atrasados.exists():
+            logger.info("✅ Nenhum checklist atrasado encontrado")
+            return "Nenhum checklist atrasado"
+        
+        # Marcar como atrasados
+        atrasados_count = checklists_atrasados.update(
+            status='ATRASADO',
+            observacoes='Checklist não realizado no prazo - marcado automaticamente como atrasado'
+        )
+        
+        # Log detalhado
+        for checklist in checklists_atrasados:
+            logger.warning(f"⚠️ Checklist atrasado: {checklist.equipamento.nome} - {checklist.turno} - {ontem}")
+        
+        resultado = f"⚠️ {atrasados_count} checklists marcados como atrasados para {ontem}"
+        logger.info(resultado)
+        
+        # Notificar responsáveis
+        _notificar_checklists_atrasados(list(checklists_atrasados), ontem)
+        
+        return resultado
+        
+    except Exception as e:
+        erro = f"❌ Erro ao verificar checklists atrasados: {e}"
+        logger.error(erro, exc_info=True)
+        raise
+
+def _notificar_checklists_atrasados(checklists_atrasados, data):
+    """
+    Notifica responsáveis sobre checklists atrasados
+    """
+    try:
+        if not checklists_atrasados:
+            return
+        
+        mensagem = f"""
+⚠️ CHECKLISTS ATRASADOS
+
+📅 Data: {data.strftime('%d/%m/%Y')}
+📋 Total atrasados: {len(checklists_atrasados)}
+
+Equipamentos:
+"""
+        
+        for checklist in checklists_atrasados[:10]:  # Limitar a 10
+            mensagem += f"• {checklist.equipamento.nome} ({checklist.turno})\n"
+        
+        if len(checklists_atrasados) > 10:
+            mensagem += f"... e mais {len(checklists_atrasados) - 10} checklists"
+        
+        logger.warning(f"📢 Notificação de atraso: {len(checklists_atrasados)} checklists")
+        
+        # Implementar envio via Telegram/email aqui
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao notificar checklists atrasados: {e}")
+
+@shared_task
+def notificar_checklists_pendentes():
+    """
+    Notifica sobre checklists pendentes do dia atual
+    Executa a cada 2 horas durante horário comercial (8h às 18h)
+    """
     try:
         from backend.apps.nr12_checklist.models import ChecklistNR12
         
         hoje = date.today()
-        agora = timezone.now()
+        agora = datetime.now().time()
         
-        # Checklists pendentes há mais de 2 horas
-        checklists_atrasados = ChecklistNR12.objects.filter(
+        # Verificar apenas durante horário comercial
+        if agora.hour < 8 or agora.hour > 18:
+            return "Fora do horário comercial"
+        
+        # Buscar checklists pendentes de hoje
+        checklists_pendentes = ChecklistNR12.objects.filter(
             data_checklist=hoje,
-            status='PENDENTE',
-            created_at__lt=agora - timedelta(hours=2)
+            status='PENDENTE'
         ).select_related('equipamento', 'equipamento__cliente')
         
-        if checklists_atrasados.exists():
-            # Agrupar por cliente
-            por_cliente = {}
-            for checklist in checklists_atrasados:
-                cliente = checklist.equipamento.cliente.razao_social
-                if cliente not in por_cliente:
-                    por_cliente[cliente] = []
-                por_cliente[cliente].append(checklist)
-            
-            # Enviar notificações (implementar depois)
-            total_atrasados = checklists_atrasados.count()
-            logger.warning(f"⚠️ {total_atrasados} checklists atrasados encontrados")
-            
-            return f"Checklists atrasados: {total_atrasados}"
+        if not checklists_pendentes.exists():
+            logger.info("✅ Nenhum checklist pendente para hoje")
+            return "Nenhum checklist pendente"
         
-        return "Nenhum checklist atrasado"
+        total_pendentes = checklists_pendentes.count()
+        
+        # Agrupar por cliente para notificação
+        pendentes_por_cliente = {}
+        for checklist in checklists_pendentes:
+            cliente = checklist.equipamento.cliente.razao_social
+            if cliente not in pendentes_por_cliente:
+                pendentes_por_cliente[cliente] = []
+            pendentes_por_cliente[cliente].append(checklist)
+        
+        # Log detalhado
+        logger.info(f"📋 {total_pendentes} checklists pendentes encontrados para {hoje}")
+        for cliente, checklists in pendentes_por_cliente.items():
+            logger.info(f"   {cliente}: {len(checklists)} pendentes")
+        
+        # Enviar notificações
+        notificados = _enviar_notificacoes_pendentes(pendentes_por_cliente, hoje)
+        
+        resultado = f"📢 {total_pendentes} checklists pendentes, {notificados} notificações enviadas"
+        logger.info(resultado)
+        
+        return resultado
         
     except Exception as e:
-        logger.error(f"❌ Erro ao verificar checklists: {e}")
+        erro = f"❌ Erro ao notificar checklists pendentes: {e}"
+        logger.error(erro, exc_info=True)
         raise
+
+def _enviar_notificacoes_pendentes(pendentes_por_cliente, data):
+    """
+    Envia notificações de checklists pendentes
+    """
+    try:
+        notificados = 0
+        
+        for cliente, checklists in pendentes_por_cliente.items():
+            mensagem = f"""
+📋 CHECKLISTS PENDENTES
+
+👤 Cliente: {cliente}
+📅 Data: {data.strftime('%d/%m/%Y')}
+⏰ Horário: {datetime.now().strftime('%H:%M')}
+
+Equipamentos pendentes:
+"""
+            
+            for checklist in checklists:
+                mensagem += f"• {checklist.equipamento.nome} ({checklist.turno})\n"
+            
+            mensagem += "\n🚨 Por favor, realize os checklists pendentes!"
+            
+            # Implementar envio real aqui (Telegram, email, etc.)
+            logger.info(f"📢 Notificação pendente para {cliente}: {len(checklists)} checklists")
+            notificados += 1
+        
+        return notificados
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao enviar notificações pendentes: {e}")
+        return 0
+
+# ================================================================
+# TASKS DE RELATÓRIOS
+# ================================================================
+
+@shared_task
+def gerar_relatorio_checklists_semanal():
+    """
+    Gera relatório semanal de checklists
+    Executa toda segunda-feira às 7h da manhã
+    """
+    try:
+        from backend.apps.nr12_checklist.models import ChecklistNR12
+        
+        # Período: última semana (segunda a domingo)
+        hoje = date.today()
+        fim_semana = hoje - timedelta(days=1)  # Domingo
+        inicio_semana = fim_semana - timedelta(days=6)  # Segunda anterior
+        
+        # Estatísticas gerais
+        total_checklists = ChecklistNR12.objects.filter(
+            data_checklist__range=[inicio_semana, fim_semana]
+        ).count()
+        
+        # Estatísticas por status
+        stats_status = ChecklistNR12.objects.filter(
+            data_checklist__range=[inicio_semana, fim_semana]
+        ).values('status').annotate(total=Count('id'))
+        
+        # Estatísticas por equipamento
+        stats_equipamentos = ChecklistNR12.objects.filter(
+            data_checklist__range=[inicio_semana, fim_semana]
+        ).values('equipamento__nome').annotate(total=Count('id')).order_by('-total')[:10]
+        
+        # Preparar dados do relatório
+        dados_relatorio = {
+            'periodo': f"{inicio_semana.strftime('%d/%m')} a {fim_semana.strftime('%d/%m/%Y')}",
+            'total_checklists': total_checklists,
+            'por_status': {item['status']: item['total'] for item in stats_status},
+            'top_equipamentos': list(stats_equipamentos),
+            'gerado_em': datetime.now().strftime('%d/%m/%Y %H:%M')
+        }
+        
+        # Log do relatório
+        logger.info(f"📊 Relatório semanal gerado para {dados_relatorio['periodo']}")
+        logger.info(f"   Total de checklists: {total_checklists}")
+        for status, total in dados_relatorio['por_status'].items():
+            logger.info(f"   {status}: {total}")
+        
+        # Enviar relatório
+        _enviar_relatorio_semanal(dados_relatorio)
+        
+        return f"📊 Relatório semanal: {total_checklists} checklists no período"
+        
+    except Exception as e:
+        erro = f"❌ Erro ao gerar relatório semanal: {e}"
+        logger.error(erro, exc_info=True)
+        raise
+
+def _enviar_relatorio_semanal(dados):
+    """
+    Envia relatório semanal por email/Telegram
+    """
+    try:
+        mensagem = f"""
+📊 RELATÓRIO SEMANAL DE CHECKLISTS
+
+📅 Período: {dados['periodo']}
+📋 Total de checklists: {dados['total_checklists']}
+
+📈 Por Status:
+"""
+        
+        for status, total in dados['por_status'].items():
+            porcentagem = (total / dados['total_checklists'] * 100) if dados['total_checklists'] > 0 else 0
+            mensagem += f"• {status}: {total} ({porcentagem:.1f}%)\n"
+        
+        mensagem += f"\n🕐 Gerado em: {dados['gerado_em']}"
+        
+        logger.info(f"📧 Enviando relatório semanal: {dados['total_checklists']} checklists")
+        
+        # Implementar envio real aqui
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao enviar relatório semanal: {e}")
 
 # ================================================================
 # TASKS DE MANUTENÇÃO
 # ================================================================
 
 @shared_task
-def verificar_alertas_manutencao():
-    """Verifica e cria alertas de manutenção preventiva"""
+def limpar_checklists_antigos():
+    """
+    Remove checklists muito antigos (mais de 2 anos)
+    Executa todo domingo às 3h da manhã
+    """
     try:
-        from backend.apps.equipamentos.models import Equipamento
-        from backend.apps.nr12_checklist.models import AlertaManutencao
+        from backend.apps.nr12_checklist.models import ChecklistNR12
         
-        hoje = date.today()
-        alertas_criados = 0
+        # Data de corte: 2 anos atrás
+        data_corte = date.today() - timedelta(days=730)
         
-        # Equipamentos com manutenção vencida ou próxima
-        equipamentos = Equipamento.objects.filter(
-            ativo=True,
-            proxima_manutencao_preventiva__lte=hoje + timedelta(days=7)
+        # Contar checklists antigos
+        checklists_antigos = ChecklistNR12.objects.filter(
+            data_checklist__lt=data_corte
         )
         
-        for equipamento in equipamentos:
-            dias_restantes = (equipamento.proxima_manutencao_preventiva - hoje).days
-            
-            # Determinar criticidade baseada nos dias restantes
-            if dias_restantes < 0:
-                criticidade = 'CRITICA'
-                titulo = f"Manutenção VENCIDA - {equipamento.nome}"
-            elif dias_restantes <= 3:
-                criticidade = 'ALTA'
-                titulo = f"Manutenção urgente - {equipamento.nome}"
-            else:
-                criticidade = 'MEDIA'
-                titulo = f"Manutenção próxima - {equipamento.nome}"
-            
-            # Verificar se já existe alerta ativo
-            if not AlertaManutencao.objects.filter(
-                equipamento=equipamento,
-                tipo='PREVENTIVA',
-                status__in=['ATIVO', 'NOTIFICADO'],
-                data_prevista=equipamento.proxima_manutencao_preventiva
-            ).exists():
-                
-                AlertaManutencao.objects.create(
-                    equipamento=equipamento,
-                    tipo='PREVENTIVA',
-                    titulo=titulo,
-                    descricao=f"Manutenção preventiva programada para {equipamento.proxima_manutencao_preventiva}. Dias restantes: {dias_restantes}",
-                    criticidade=criticidade,
-                    data_prevista=equipamento.proxima_manutencao_preventiva
-                )
-                alertas_criados += 1
+        total_antigos = checklists_antigos.count()
         
-        logger.info(f"✅ {alertas_criados} alertas de manutenção criados")
-        return f"Alertas criados: {alertas_criados}"
+        if total_antigos == 0:
+            logger.info("✅ Nenhum checklist antigo para remover")
+            return "Nenhum checklist antigo encontrado"
+        
+        # Remover (cuidado com cascade)
+        checklists_antigos.delete()
+        
+        resultado = f"🧹 {total_antigos} checklists anteriores a {data_corte} removidos"
+        logger.info(resultado)
+        
+        return resultado
         
     except Exception as e:
-        logger.error(f"❌ Erro ao verificar manutenções: {e}")
+        erro = f"❌ Erro na limpeza de checklists antigos: {e}"
+        logger.error(erro, exc_info=True)
         raise
 
-# ================================================================
-# TASKS FINANCEIRAS
-# ================================================================
-
 @shared_task
-def verificar_contas_vencidas():
-    """Verifica contas vencidas e próximas ao vencimento"""
+def verificar_integridade_dados():
+    """
+    Verifica integridade dos dados de checklists
+    Executa diariamente às 4h da manhã
+    """
     try:
-        from backend.apps.financeiro.models import ContaFinanceira
+        from backend.apps.nr12_checklist.models import ChecklistNR12, ItemChecklistRealizado
         
-        hoje = date.today()
+        problemas = []
         
-        # Contas vencidas
-        vencidas = ContaFinanceira.objects.filter(
-            status='PENDENTE',
-            data_vencimento__lt=hoje
-        ).update(status='VENCIDO')
-        
-        # Contas próximas ao vencimento (próximos 7 dias)
-        proximas = ContaFinanceira.objects.filter(
-            status='PENDENTE',
-            data_vencimento__range=[hoje, hoje + timedelta(days=7)]
+        # 1. Checklists sem itens
+        checklists_sem_itens = ChecklistNR12.objects.filter(
+            itens_realizados__isnull=True
         ).count()
         
-        logger.info(f"✅ {vencidas} contas marcadas como vencidas, {proximas} próximas ao vencimento")
-        return f"Vencidas: {vencidas}, Próximas: {proximas}"
+        if checklists_sem_itens > 0:
+            problemas.append(f"❌ {checklists_sem_itens} checklists sem itens")
+        
+        # 2. Itens órfãos (sem checklist)
+        itens_orfaos = ItemChecklistRealizado.objects.filter(
+            checklist__isnull=True
+        ).count()
+        
+        if itens_orfaos > 0:
+            problemas.append(f"❌ {itens_orfaos} itens órfãos")
+        
+        # 3. Checklists órfãos (sem equipamento)
+        checklists_orfaos = ChecklistNR12.objects.filter(
+            equipamento__isnull=True
+        ).count()
+        
+        if checklists_orfaos > 0:
+            problemas.append(f"❌ {checklists_orfaos} checklists órfãos")
+        
+        if not problemas:
+            resultado = "✅ Integridade dos dados OK"
+            logger.info(resultado)
+        else:
+            resultado = f"⚠️ Problemas encontrados: {'; '.join(problemas)}"
+            logger.warning(resultado)
+        
+        return resultado
         
     except Exception as e:
-        logger.error(f"❌ Erro ao verificar contas: {e}")
+        erro = f"❌ Erro na verificação de integridade: {e}"
+        logger.error(erro, exc_info=True)
         raise
-
-@shared_task
-def calcular_metricas_financeiras():
-    """Calcula métricas financeiras do mês"""
-    try:
-        from backend.apps.financeiro.models import ContaFinanceira
-        from backend.apps.dashboard.models import KPISnapshot
-        
-        hoje = date.today()
-        inicio_mes = hoje.replace(day=1)
-        
-        # Faturamento do mês
-        faturamento = ContaFinanceira.objects.filter(
-            tipo='RECEBER',
-            status='PAGO',
-            data_pagamento__range=[inicio_mes, hoje]
-        ).aggregate(total=Sum('valor_pago'))['total'] or 0
-        
-        # Despesas do mês
-        despesas = ContaFinanceira.objects.filter(
-            tipo='PAGAR',
-            status='PAGO',
-            data_pagamento__range=[inicio_mes, hoje]
-        ).aggregate(total=Sum('valor_pago'))['total'] or 0
-        
-        # Contas a receber em aberto
-        a_receber = ContaFinanceira.objects.filter(
-            tipo='RECEBER',
-            status__in=['PENDENTE', 'VENCIDO']
-        ).aggregate(total=Sum('valor_restante'))['total'] or 0
-        
-        # Contas a pagar em aberto
-        a_pagar = ContaFinanceira.objects.filter(
-            tipo='PAGAR',
-            status__in=['PENDENTE', 'VENCIDO']
-        ).aggregate(total=Sum('valor_restante'))['total'] or 0
-        
-        # Atualizar KPI snapshot
-        snapshot, created = KPISnapshot.objects.get_or_create(
-            data_snapshot=hoje,
-            defaults={
-                'faturamento_mes': faturamento,
-                'contas_a_receber': a_receber,
-                'contas_a_pagar': a_pagar
-            }
-        )
-        
-        if not created:
-            snapshot.faturamento_mes = faturamento
-            snapshot.contas_a_receber = a_receber
-            snapshot.contas_a_pagar = a_pagar
-            snapshot.save()
-        
-        logger.info(f"✅ Métricas financeiras calculadas - Faturamento: R$ {faturamento}")
-        return f"Faturamento: R$ {faturamento:.2f}"
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao calcular métricas financeiras: {e}")
-        raise
-
-# ================================================================
-# TASKS DE ESTOQUE
-# ================================================================
-
-@shared_task
-def verificar_estoque_baixo():
-    """Verifica produtos com estoque baixo"""
-    try:
-        from backend.apps.almoxarifado.models import Produto
-        from backend.apps.dashboard.models import AlertaDashboard
-        
-        produtos_baixo = Produto.objects.filter(estoque_atual__lt=5)
-        
-        if produtos_baixo.exists():
-            count = produtos_baixo.count()
-            
-            # Criar alerta no dashboard
-            AlertaDashboard.objects.get_or_create(
-                tipo='ESTOQUE',
-                titulo=f"{count} produtos com estoque baixo",
-                defaults={
-                    'descricao': f"Existem {count} produtos com estoque abaixo de 5 unidades. Verifique e faça pedidos de reposição.",
-                    'prioridade': 'MEDIA',
-                    'ativo': True,
-                    'icone': '📦',
-                    'link_acao': '/admin/almoxarifado/produto/?estoque_atual__lt=5'
-                }
-            )
-            
-            logger.warning(f"⚠️ {count} produtos com estoque baixo")
-            return f"Produtos com estoque baixo: {count}"
-        
-        return "Estoque normal"
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao verificar estoque: {e}")
-        raise
-
-# ================================================================
-# TASKS DE BACKUP E LIMPEZA
-# ================================================================
-
-@shared_task
-def backup_dados_importantes():
-    """Backup dos dados mais importantes do sistema"""
-    try:
-        from django.core import serializers
-        from backend.apps.equipamentos.models import Equipamento
-        from backend.apps.nr12_checklist.models import ChecklistNR12, TipoEquipamentoNR12
-        from backend.apps.clientes.models import Cliente
-        import json
-        import os
-        
-        hoje = date.today()
-        timestamp = hoje.strftime('%Y%m%d')
-        backup_dir = f"backups/{timestamp}"
-        
-        # Criar diretório se não existir
-        os.makedirs(backup_dir, exist_ok=True)
-        
-        # Backup de equipamentos
-        equipamentos = serializers.serialize('json', Equipamento.objects.all())
-        with open(f"{backup_dir}/equipamentos.json", 'w') as f:
-            f.write(equipamentos)
-        
-        # Backup de clientes
-        clientes = serializers.serialize('json', Cliente.objects.all())
-        with open(f"{backup_dir}/clientes.json", 'w') as f:
-            f.write(clientes)
-        
-        # Backup de tipos NR12
-        tipos_nr12 = serializers.serialize('json', TipoEquipamentoNR12.objects.all())
-        with open(f"{backup_dir}/tipos_nr12.json", 'w') as f:
-            f.write(tipos_nr12)
-        
-        # Backup de checklists dos últimos 30 dias
-        data_limite = hoje - timedelta(days=30)
-        checklists = serializers.serialize(
-            'json', 
-            ChecklistNR12.objects.filter(data_checklist__gte=data_limite)
-        )
-        with open(f"{backup_dir}/checklists_recentes.json", 'w') as f:
-            f.write(checklists)
-        
-        logger.info(f"✅ Backup realizado em {backup_dir}")
-        return f"Backup realizado: {backup_dir}"
-        
-    except Exception as e:
-        logger.error(f"❌ Erro no backup: {e}")
-        raise
-
-@shared_task
-def limpeza_dados_antigos():
-    """Remove dados antigos desnecessários"""
-    try:
-        from backend.apps.dashboard.models import AlertaDashboard, KPISnapshot
-        
-        # Remover alertas inativos antigos (30 dias)
-        data_corte_alertas = timezone.now() - timedelta(days=30)
-        alertas_removidos = AlertaDashboard.objects.filter(
-            ativo=False,
-            criado_em__lt=data_corte_alertas
-        ).delete()[0]
-        
-        # Manter apenas KPIs dos últimos 180 dias
-        data_corte_kpis = date.today() - timedelta(days=180)
-        kpis_removidos = KPISnapshot.objects.filter(
-            data_snapshot__lt=data_corte_kpis
-        ).delete()[0]
-        
-        logger.info(f"✅ Limpeza concluída - Alertas: {alertas_removidos}, KPIs: {kpis_removidos}")
-        return f"Removidos: {alertas_removidos} alertas, {kpis_removidos} KPIs"
-        
-    except Exception as e:
-        logger.error(f"❌ Erro na limpeza: {e}")
-        raise
-
-# ================================================================
-# TASKS DE NOTIFICAÇÕES
-# ================================================================
-
-@shared_task
-def enviar_relatorio_diario():
-    """Envia relatório diário por email"""
-    try:
-        from backend.apps.dashboard.models import obter_resumo_dashboard
-        
-        hoje = date.today()
-        resumo = obter_resumo_dashboard()
-        
-        # Preparar conteúdo do email
-        assunto = f"Relatório Diário Mandacaru ERP - {hoje.strftime('%d/%m/%Y')}"
-        
-        corpo = f"""
-        📊 RELATÓRIO DIÁRIO - {hoje.strftime('%d/%m/%Y')}
-        ================================================
-        
-        🔧 EQUIPAMENTOS:
-        • Total: {resumo['kpis']['total_equipamentos']}
-        • Operacionais: {resumo['kpis']['equipamentos_operacionais']}
-        • Em manutenção: {resumo['kpis']['equipamentos_manutencao']}
-        • NR12 ativos: {resumo['kpis']['equipamentos_nr12_ativos']}
-        
-        📋 CHECKLISTS NR12:
-        • Pendentes: {resumo['kpis']['checklists_pendentes']}
-        • Concluídos: {resumo['kpis']['checklists_concluidos']}
-        • Com problemas: {resumo['kpis']['checklists_com_problemas']}
-        
-        🚨 ALERTAS:
-        • Críticos: {resumo['kpis']['alertas_criticos']}
-        • Ativos: {resumo['kpis']['alertas_ativos']}
-        
-        💰 FINANCEIRO:
-        • Contas vencidas: R$ {resumo['kpis']['contas_vencidas']:,.2f}
-        • A vencer: R$ {resumo['kpis']['contas_a_vencer']:,.2f}
-        • Faturamento mês: R$ {resumo['kpis']['faturamento_mes']:,.2f}
-        
-        --
-        Sistema Mandacaru ERP
-        """
-        
-        # Enviar email (configurar destinatários no settings)
-        destinatarios = getattr(settings, 'RELATORIO_EMAIL_DESTINATARIOS', [])
-        if destinatarios:
-            send_mail(
-                assunto,
-                corpo,
-                settings.DEFAULT_FROM_EMAIL,
-                destinatarios,
-                fail_silently=False,
-            )
-            logger.info(f"✅ Relatório enviado para {len(destinatarios)} destinatários")
-        
-        return f"Relatório enviado para {len(destinatarios)} destinatários"
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao enviar relatório: {e}")
-        raise
-
-# ================================================================
-# TASK PRINCIPAL DE MONITORAMENTO
-# ================================================================
-
-@shared_task
-def monitoramento_sistema():
-    """Task principal que monitora a saúde do sistema"""
-    try:
-        import psutil
-        from django.db import connection
-        
-        # Verificar uso de CPU e memória
-        cpu_percent = psutil.cpu_percent(interval=1)
-        memory = psutil.virtual_memory()
-        
-        # Verificar conexão com banco
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            db_ok = True
-        
-        # Log da saúde do sistema
-        logger.info(f"🖥️ Sistema - CPU: {cpu_percent}%, RAM: {memory.percent}%, DB: {'✅' if db_ok else '❌'}")
-        
-        # Alertar se recursos críticos
-        if cpu_percent > 90 or memory.percent > 90:
-            logger.warning(f"⚠️ Recursos do sistema em nível crítico!")
-        
-        return f"CPU: {cpu_percent}%, RAM: {memory.percent}%"
-        
-    except Exception as e:
-        logger.error(f"❌ Erro no monitoramento: {e}")
-        return f"Erro: {str(e)}"

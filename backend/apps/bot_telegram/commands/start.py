@@ -1,30 +1,35 @@
-### File: backend/apps/bot_telegram/commands/start.py
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
-from backend.apps.bot_telegram.utils.sessions import init_session
-from backend.apps.bot_telegram.utils.keyboards import main_menu_keyboard
+import logging
 
+logger = logging.getLogger(__name__)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat_id = update.effective_chat.id
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando /start"""
+    try:
+        user_name = update.effective_user.first_name or "Usuário"
+        
+        await update.message.reply_text(
+            f"👋 **Bem-vindo ao Mandacaru ERP, {user_name}!**\n\n"
+            f"🤖 **Sou o assistente virtual que vai ajudá-lo com:**\n"
+            f"• ✅ Checklists NR12\n"
+            f"• ⛽ Registro de abastecimentos\n"
+            f"• ⚠️ Reporte de anomalias\n"
+            f"• 📊 Consulta de históricos\n\n"
+            f"🔐 **Para começar:**\n"
+            f"Digite seu código de operador (ex: `OP0001`)\n"
+            f"Ou envie uma foto do QR Code do seu cartão.\n\n"
+            f"❓ **Precisa de ajuda?** Digite `/help`",
+            parse_mode='Markdown'
+        )
+        
+        logger.info(f"Comando /start executado por {user_name} (ID: {update.effective_user.id})")
+        
+    except Exception as e:
+        logger.error(f"Erro no comando /start: {e}")
+        await update.message.reply_text(
+            "❌ Erro ao inicializar.\n"
+            "Tente novamente."
+        )
 
-    init_session(chat_id, {
-        'step': 'menu_principal',
-        'operador': None,
-        'equipamento': None,
-        'data': {}
-    })
-
-    welcome = (
-        f"🤖 *Bem-vindo ao Bot Mandacaru ERP*\n\n"
-        f"Olá, {user.first_name}!\n\n"
-        "Use o menu abaixo para navegar pelas funções."
-    )
-    await update.message.reply_text(
-        welcome,
-        parse_mode='Markdown',
-        reply_markup=main_menu_keyboard()
-    )
-
-start_handler = CommandHandler('start', start)
+start_handler = CommandHandler('start', start_command)
