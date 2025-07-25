@@ -41,3 +41,6 @@ tzdata==2025.2
 vine==5.1.0
 wcwidth==0.2.13
 whitenoise==6.9.0
+aiogram==3.4.1
+httpx==0.26.0
+psutil==5.9.8

@@ -6,6 +6,7 @@ from pathlib import Path
 from decouple import config
 import os
 import dj_database_url
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,7 +32,7 @@ INSTALLED_APPS = [
 
     # Apps internos - personalizados do seu projeto
     'backend.apps.auth_cliente',
-    'backend.apps.bot_telegram',
+    #'backend.apps.bot_telegram',
     'backend.apps.shared',
     'backend.apps.cliente_portal',
     'backend.apps.clientes',
@@ -175,3 +176,17 @@ ADMIN_IDS = config('ADMIN_IDS', default='').split(',') if config('ADMIN_IDS', de
 QR_CODE_ENABLED = True
 QR_CODE_SIZE = (300, 300)
 
+CELERY_BEAT_SCHEDULE = {
+    'checklists_diarios_6h': {
+        'task': 'backend.apps.nr12_checklist.tasks.gerar_checklists_diarios',
+        'schedule': crontab(hour=6, minute=0),
+    },
+    'checklists_semanais_segunda_6h': {
+        'task': 'backend.apps.nr12_checklist.tasks.gerar_checklists_semanais',
+        'schedule': crontab(hour=6, minute=0, day_of_week='mon'),
+    },
+    'checklists_mensais_1_6h': {
+        'task': 'backend.apps.nr12_checklist.tasks.gerar_checklists_mensais',
+        'schedule': crontab(hour=6, minute=0, day_of_month='1'),
+    },
+}

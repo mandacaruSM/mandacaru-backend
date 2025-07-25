@@ -108,7 +108,7 @@ urlpatterns = [
     # ================================================================
     
     # Bot Telegram principal (se tiver URLs específicas fora do NR12)
-    path('', include('backend.apps.bot_telegram.urls')),
+    #path('', include('backend.apps.bot_telegram.urls')),
     
     # ✅ Abastecimento (descomentado se necessário)
     # path('abastecimento/', include('backend.apps.abastecimento.urls')),
