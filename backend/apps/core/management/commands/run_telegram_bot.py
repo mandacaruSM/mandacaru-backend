@@ -11,67 +11,56 @@ Depois execute:
 python manage.py run_telegram_bot
 """
 
-import asyncio
+# backend/apps/core/management/commands/run_telegram_bot.py
+
 import os
 import sys
-from pathlib import Path
 from django.core.management.base import BaseCommand
 from django.conf import settings
 
 class Command(BaseCommand):
-    help = 'Executa o Bot Telegram do Mandacaru'
+    help = 'Executa o bot do Telegram integrado ao Django'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--debug',
             action='store_true',
-            help='Executa o bot em modo debug',
-        )
-        parser.add_argument(
-            '--webhook',
-            action='store_true',
-            help='Usa webhook ao invés de polling',
+            help='Executa em modo debug com logs detalhados',
         )
 
     def handle(self, *args, **options):
-        self.stdout.write(
-            self.style.SUCCESS('🤖 Iniciando Bot Telegram Mandacaru...')
-        )
-
-        # Adicionar o caminho do bot ao PYTHONPATH
-        bot_path = Path(settings.BASE_DIR) / 'mandacaru_bot'
-        if str(bot_path) not in sys.path:
-            sys.path.insert(0, str(bot_path))
-
+        # Adicionar o diretório do bot ao Python path
+        bot_path = os.path.join(settings.BASE_DIR, 'mandacaru_bot')
+        if bot_path not in sys.path:
+            sys.path.insert(0, bot_path)
+        
+        # Configurar variáveis de ambiente se necessário
+        if not os.environ.get('DJANGO_SETTINGS_MODULE'):
+            os.environ['DJANGO_SETTINGS_MODULE'] = 'backend.settings'
+        
+        # Definir modo debug
+        if options['debug']:
+            os.environ['BOT_DEBUG'] = 'True'
+        
         try:
             # Importar e executar o bot
-            from bot_main.main import main
+            self.stdout.write(self.style.SUCCESS('🤖 Iniciando Bot Telegram Mandacaru...'))
             
-            # Configurar modo debug se especificado
-            if options['debug']:
-                os.environ['BOT_DEBUG'] = 'True'
-                self.stdout.write(
-                    self.style.WARNING('🔧 Modo debug ativado')
-                )
-
-            # Configurar webhook se especificado
-            if options['webhook']:
-                os.environ['USE_WEBHOOK'] = 'True'
-                self.stdout.write(
-                    self.style.WARNING('🌐 Modo webhook ativado')
-                )
-
+            from mandacaru_bot.start import main
+            
             # Executar o bot
-            self.stdout.write('🚀 Bot iniciado. Pressione Ctrl+C para parar.')
-            asyncio.run(main())
-
+            main()
+            
+        except ImportError as e:
+            self.stdout.write(
+                self.style.ERROR(
+                    f'❌ Erro ao importar módulo do bot: {e}\n'
+                    f'Verifique se a pasta mandacaru_bot está em: {bot_path}'
+                )
+            )
+            sys.exit(1)
         except KeyboardInterrupt:
-            self.stdout.write(
-                self.style.SUCCESS('\n🛑 Bot interrompido pelo usuário')
-            )
+            self.stdout.write(self.style.WARNING('\n⚠️ Bot interrompido pelo usuário'))
         except Exception as e:
-            self.stdout.write(
-                self.style.ERROR(f'❌ Erro ao executar bot: {e}')
-            )
-            raise
-    
+            self.stdout.write(self.style.ERROR(f'❌ Erro ao executar bot: {e}'))
+            sys.exit(1)

@@ -234,3 +234,65 @@ class Equipamento(EquipamentoQRMixin, models.Model):
         if is_new:
             # só depois do primeiro save teremos um ID definido
             self.gerar_qr_png()
+
+    def get_tipo_nr12(self):
+        """
+        Retorna o tipo de equipamento NR12 associado
+        Busca primeiro por associação direta, depois por categoria
+        """
+        from backend.apps.nr12_checklist.models import TipoEquipamentoNR12
+        
+        # Verificar se há associação direta
+        if hasattr(self, 'tipo_nr12_direto'):
+            return self.tipo_nr12_direto
+        
+        # Buscar por categoria
+        if self.categoria:
+            tipo_nr12 = TipoEquipamentoNR12.objects.filter(
+                categoria_equipamento=self.categoria,
+                ativo=True
+            ).first()
+            if tipo_nr12:
+                return tipo_nr12
+        
+        # Buscar por nome/modelo similar
+        if self.modelo:
+            # Buscar tipo NR12 que contenha o modelo do equipamento
+            tipo_nr12 = TipoEquipamentoNR12.objects.filter(
+                nome__icontains=self.modelo.split()[0],  # Primeira palavra do modelo
+                ativo=True
+            ).first()
+            if tipo_nr12:
+                return tipo_nr12
+        
+        # Retornar tipo genérico se existir
+        return TipoEquipamentoNR12.objects.filter(
+            codigo='GENERICO',
+            ativo=True
+        ).first()
+    
+    def get_info_para_bot(self):
+        """Retorna informações do equipamento formatadas para o bot"""
+        return {
+            'id': self.id,
+            'numero_serie': self.numero_serie,
+            'modelo': self.modelo,
+            'fabricante': self.fabricante,
+            'categoria': self.categoria.nome if self.categoria else None,
+            'status': self.status_operacional,
+            'horimetro': float(self.horimetro_atual or 0),
+            'cliente': {
+                'id': self.cliente.id if self.cliente else None,
+                'nome': self.cliente.razao_social if self.cliente else None,
+            },
+            'empreendimento': {
+                'id': self.empreendimento.id if self.empreendimento else None,
+                'nome': self.empreendimento.nome if self.empreendimento else None,
+            },
+            'ativo_nr12': self.ativo_nr12,
+            'requer_checklist': self.ativo_nr12,
+            'tipo_nr12': {
+                'id': self.get_tipo_nr12().id if self.get_tipo_nr12() else None,
+                'nome': self.get_tipo_nr12().nome if self.get_tipo_nr12() else None,
+            }
+        }

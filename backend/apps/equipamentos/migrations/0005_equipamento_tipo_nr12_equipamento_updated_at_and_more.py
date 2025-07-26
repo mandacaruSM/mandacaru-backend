@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
         ('clientes', '0001_initial'),
         ('empreendimentos', '0002_remove_empreendimento_localizacao_empreendimento_cep_and_more'),
         ('equipamentos', '0004_alter_equipamento_options_equipamento_ativo_nr12_and_more'),
-        ('nr12_checklist', '0001_initial'),
+        ('nr12_checklist', '__first__'),
     ]
 
     operations = [

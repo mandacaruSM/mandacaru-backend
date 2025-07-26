@@ -1,4 +1,4 @@
-# apps/operadores/urls.py
+# backend/apps/operadores/urls.py
 from django.urls import path
 from . import views
 

@@ -13,6 +13,11 @@ from PIL import Image, ImageDraw, ImageFont
 import uuid
 import json
 
+
+from django.contrib.auth.models import User
+from django.utils import timezone
+
+
 class Operador(models.Model):
     TIPO_DOCUMENTO_CHOICES = [
         ('CPF', 'CPF'),
@@ -135,10 +140,26 @@ class Operador(models.Model):
     )
 
     # Bot Telegram
-    ultimo_acesso_bot = models.DateTimeField(null=True, blank=True)
-    chat_id_telegram = models.CharField(max_length=50, blank=True, null=True, unique=True)  # Adicionei null=True
-    ativo_bot = models.BooleanField(default=True, help_text='Pode usar o bot do Telegram')
-
+    chat_id_telegram = models.CharField(
+        max_length=20, 
+        blank=True, 
+        null=True,
+        help_text="ID do chat do Telegram"
+    )
+    ativo_bot = models.BooleanField(
+        default=True,
+        help_text="Se o operador pode usar o bot Telegram"
+    )
+    ultimo_acesso_bot = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Último acesso via bot Telegram"
+    )
+    qr_code_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Dados do QR Code do operador"
+    )
     # Localização e uso
     localizacao_atual = models.CharField(max_length=200, blank=True)
     ultimo_equipamento_usado = models.ForeignKey(
@@ -227,38 +248,97 @@ class Operador(models.Model):
     # ✅ MÉTODOS CRÍTICOS PARA BOT
 
     @classmethod
-    def verificar_qr_code(cls, qr_data):
-        """Verifica QR code do operador para login no bot"""
+    def verificar_qr_code(cls, qr_code):
+        """
+        Verifica e retorna o operador baseado no QR code
+        O QR pode ser o código do operador ou um JSON com dados
+        """
         try:
-            # Tentar como JSON primeiro
-            if qr_data.startswith('{'):
-                dados = json.loads(qr_data)
-                if dados.get('tipo') == 'operador':
-                    return cls.objects.get(
-                        codigo=dados['codigo'], 
-                        status='ATIVO', 
-                        ativo_bot=True
-                    )
+            # Tentar primeiro como código direto
+            operador = cls.objects.filter(
+                codigo=qr_code,
+                status='ATIVO',
+                ativo_bot=True
+            ).first()
             
-            # Tentar como código direto
-            elif qr_data.startswith('OP'):
-                return cls.objects.get(
-                    codigo=qr_data, 
-                    status='ATIVO', 
-                    ativo_bot=True
-                )
+            if operador:
+                return operador
             
-            # Tentar como qr_code_data
-            else:
-                return cls.objects.get(
-                    qr_code_data=qr_data, 
-                    status='ATIVO', 
-                    ativo_bot=True
-                )
-                
-        except (cls.DoesNotExist, json.JSONDecodeError, KeyError):
+            # Tentar como JSON
+            try:
+                qr_data = json.loads(qr_code)
+                if isinstance(qr_data, dict):
+                    # Buscar por código no JSON
+                    codigo = qr_data.get('codigo') or qr_data.get('operador_codigo')
+                    if codigo:
+                        return cls.objects.filter(
+                            codigo=codigo,
+                            status='ATIVO',
+                            ativo_bot=True
+                        ).first()
+                    
+                    # Buscar por ID no JSON
+                    operador_id = qr_data.get('id') or qr_data.get('operador_id')
+                    if operador_id:
+                        return cls.objects.filter(
+                            id=operador_id,
+                            status='ATIVO',
+                            ativo_bot=True
+                        ).first()
+            except json.JSONDecodeError:
+                pass
+            
+            # Se não encontrou, tentar buscar em qr_code_data
+            return cls.objects.filter(
+                qr_code_data__codigo=qr_code,
+                status='ATIVO',
+                ativo_bot=True
+            ).first()
+            
+        except Exception:
             return None
-
+    
+    def atualizar_ultimo_acesso(self, chat_id=None):
+        """Atualiza último acesso do operador via bot"""
+        self.ultimo_acesso_bot = timezone.now()
+        if chat_id:
+            self.chat_id_telegram = str(chat_id)
+        self.save(update_fields=['ultimo_acesso_bot', 'chat_id_telegram'])
+    
+    def get_resumo_para_bot(self):
+        """Retorna resumo dos dados do operador para o bot"""
+        return {
+            'id': self.id,
+            'codigo': self.codigo,
+            'nome': self.nome,
+            'funcao': self.funcao,
+            'empresa': self.empresa.nome if hasattr(self, 'empresa') and self.empresa else None,
+            'chat_id': self.chat_id_telegram,
+            'ativo': self.ativo_bot,
+            'permissoes': {
+                'checklist': True,
+                'abastecimento': hasattr(self, 'pode_abastecer') and self.pode_abastecer,
+                'ordem_servico': hasattr(self, 'pode_criar_os') and self.pode_criar_os,
+            }
+        }
+    
+    def pode_usar_bot(self):
+        """Verifica se o operador pode usar o bot"""
+        return self.status == 'ATIVO' and self.ativo_bot
+    
+    def gerar_qr_code_data(self):
+        """Gera dados para o QR Code do operador"""
+        qr_data = {
+            'tipo': 'operador',
+            'codigo': self.codigo,
+            'id': self.id,
+            'nome': self.nome,
+            'timestamp': timezone.now().isoformat()
+        }
+        self.qr_code_data = qr_data
+        self.save(update_fields=['qr_code_data'])
+        return qr_data
+    
     def get_equipamentos_disponiveis(self):
         """Retorna equipamentos que este operador pode usar"""
         from backend.apps.equipamentos.models import Equipamento

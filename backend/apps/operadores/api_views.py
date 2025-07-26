@@ -1,11 +1,11 @@
-from rest_framework import viewsets, filters
-from rest_framework.permissions import AllowAny
-from .models import Operador
-from .serializers import OperadorSerializer
+# backend/apps/operadores/api_urls.py
+from django.urls import path
+from .api_views import OperadorListAPIView
 
-class OperadorViewSet(viewsets.ModelViewSet):
-    queryset = Operador.objects.all()
-    serializer_class = OperadorSerializer
-    filter_backends = [filters.SearchFilter]
-    search_fields = ['nome', 'cpf', 'codigo']
-    permission_classes = [AllowAny]
+app_name = 'api_operadores'
+
+urlpatterns = [
+    # GET  /api/operadores/?search=...
+    path('', OperadorListAPIView.as_view(), name='list'),
+]
+
