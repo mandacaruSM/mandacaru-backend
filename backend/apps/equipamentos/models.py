@@ -8,6 +8,9 @@ import os
 from django.db import models
 from datetime import date
 from django.contrib.postgres.fields import ArrayField  
+from uuid import uuid4
+from django.db import models
+
 
 class CategoriaEquipamento(models.Model):
     """Categorias de equipamentos para organização"""
@@ -28,6 +31,7 @@ class CategoriaEquipamento(models.Model):
 
 
 class Equipamento(EquipamentoQRMixin, models.Model):
+    uuid = models.UUIDField(default=uuid4, editable=False, unique=True)
     """Modelo completo para equipamentos"""
 
     STATUS_CHOICES = [

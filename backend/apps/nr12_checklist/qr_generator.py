@@ -99,3 +99,31 @@ def gerar_qr_code_base64(checklist):
         'data': checklist.data_checklist,
         'turno': checklist.turno
     }
+
+import qrcode
+import os
+
+def gerar_qr_equipamento_para_bot(equipamento, bot_username='SeuBotMandacaruBot'):
+    """
+    Gera um QR Code com o link /start=eq:{uuid} para o bot Telegram
+    """
+    if not equipamento.uuid:
+        raise ValueError("Equipamento não possui UUID")
+
+    # Link completo para Telegram
+    qr_data = f"https://t.me/{bot_username}?start=eq:{equipamento.uuid}"
+
+    # Caminho para salvar
+    pasta = os.path.join('media', 'qr_codes', 'equipamentos')
+    os.makedirs(pasta, exist_ok=True)
+    caminho_png = os.path.join(pasta, f"{equipamento.uuid}.png")
+
+    # Gerar QR
+    img = qrcode.make(qr_data)
+    img.save(caminho_png)
+
+    return {
+        "uuid": equipamento.uuid,
+        "url": f"/media/qr_codes/equipamentos/{equipamento.uuid}.png",
+        "qr_data": qr_data
+    }

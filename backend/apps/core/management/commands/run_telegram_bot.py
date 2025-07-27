@@ -49,7 +49,8 @@ class Command(BaseCommand):
             from mandacaru_bot.start import main
             
             # Executar o bot
-            main()
+            import asyncio
+            asyncio.run(main())
             
         except ImportError as e:
             self.stdout.write(

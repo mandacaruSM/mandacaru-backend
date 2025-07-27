@@ -1,5 +1,5 @@
 # =============================
-# bot_main/main.py (atualizado)
+# bot_main/main.py (corrigido e funcional com router de equipamento)
 # =============================
 
 import asyncio
@@ -16,6 +16,7 @@ from bot_abastecimento.handlers import register_handlers as register_abastecimen
 from bot_os.handlers import register_handlers as register_os_handlers
 from bot_financeiro.handlers import register_handlers as register_financeiro_handlers
 from bot_qrcode.handlers import register_handlers as register_qrcode_handlers
+from mandacaru_bot.bot_equipamento.handlers import router as equipamento_router
 
 # Configurar logging
 logging.basicConfig(
@@ -30,16 +31,17 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 dp = Dispatcher()
+dp.include_router(equipamento_router)  # Adiciona o router do bot_equipamento
 
 async def on_startup():
     """Função executada na inicialização do bot"""
     logger.info("🚀 Bot Mandacaru iniciando...")
-    
+
     # Limpar sessões expiradas
     sessoes_removidas = limpar_sessoes_expiradas(24)  # Remove sessões > 24h
     if sessoes_removidas > 0:
         logger.info(f"🧹 Removidas {sessoes_removidas} sessões expiradas")
-    
+
     logger.info("✅ Bot Mandacaru iniciado com sucesso!")
 
 async def on_shutdown():
@@ -61,8 +63,8 @@ async def periodic_cleanup():
 
 def register_all_handlers():
     """Registra todos os handlers dos módulos"""
-    logger.info("📝 Registrando handlers...")
-    
+    logger.info("📜 Registrando handlers...")
+
     # Registrar handlers na ordem correta (main primeiro, admin depois)
     register_main_handlers(dp)
     register_admin_handlers(dp)
@@ -71,7 +73,7 @@ def register_all_handlers():
     register_os_handlers(dp)
     register_financeiro_handlers(dp)
     register_qrcode_handlers(dp)
-    
+
     logger.info("✅ Todos os handlers registrados")
 
 async def main():
@@ -79,18 +81,18 @@ async def main():
     try:
         # Registrar handlers
         register_all_handlers()
-        
+
         # Configurar eventos de startup e shutdown
         dp.startup.register(on_startup)
         dp.shutdown.register(on_shutdown)
-        
+
         # Iniciar limpeza automática em background
         cleanup_task = asyncio.create_task(periodic_cleanup())
-        
+
         # Iniciar polling
         logger.info("🔄 Iniciando polling...")
         await dp.start_polling(bot)
-        
+
     except Exception as e:
         logger.error(f"❌ Erro crítico: {e}")
         raise

@@ -90,7 +90,9 @@ AUTH_USER_MODEL = 'auth_cliente.UsuarioCliente'
 
 TEMPLATES = [{
     'BACKEND': 'django.template.backends.django.DjangoTemplates',
-    'DIRS': [],
+    'DIRS': [
+        BASE_DIR / 'backend/apps/templates',
+    ],
     'APP_DIRS': True,
     'OPTIONS': {
         'context_processors': [
@@ -190,3 +192,24 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=6, minute=0, day_of_month='1'),
     },
 }
+# ================================================================
+# CONFIGURAÇÕES CELERY (adicionar no final do arquivo)
+# ================================================================
+
+# Celery Configuration
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+
+# Configurações básicas
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'America/Sao_Paulo'
+CELERY_ENABLE_UTC = True
+
+# Configurações para Windows
+CELERY_WORKER_POOL = 'threads'
+CELERY_WORKER_CONCURRENCY = 1
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_ACKS_LATE = True

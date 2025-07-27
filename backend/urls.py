@@ -53,10 +53,19 @@ def app_exists(app_path):
 urlpatterns = [
     # Administração
     path('admin/', admin.site.urls),
+    path('api/operadores/', include('backend.apps.operadores.urls')),
+
+    
+    path('api/nr12/', include('backend.apps.nr12_checklist.urls_bot')),
     
     # API Root
     path('api/', api_root, name='api-root'),
     
+    # ✅ URLs das Views HTML (navegação web)
+    path('operadores/', include('backend.apps.operadores.urls')),
+    
+    # ✅ URLs da API REST (para bot e frontend)
+    path('api/operadores/', include('backend.apps.operadores.api_urls')),
 ]
 
 # Adicionar URLs dos apps que existem
@@ -67,31 +76,26 @@ apps_urls = [
     ('api/equipamentos/', 'backend.apps.equipamentos'),
     ('api/clientes/', 'backend.apps.clientes'),
     ('api/empreendimentos/', 'backend.apps.empreendimentos'),
-    ('api/operadores/', 'backend.apps.operadores'),
     ('api/almoxarifado/', 'backend.apps.almoxarifado'),
     ('api/financeiro/', 'backend.apps.financeiro'),
     ('api/manutencao/', 'backend.apps.manutencao'),
-    ('api/ordens-servico/', 'backend.apps.ordens_servico'),
     ('api/orcamentos/', 'backend.apps.orcamentos'),
-    ('api/fornecedor/', 'backend.apps.fornecedor'),
+    ('api/ordens-servico/', 'backend.apps.ordens_servico'),
     ('api/relatorios/', 'backend.apps.relatorios'),
-    ('api/portal/', 'backend.apps.cliente_portal'),
+    ('api/abastecimento/', 'backend.apps.abastecimento'),
+    ('api/fornecedor/', 'backend.apps.fornecedor'),
 ]
 
-# Adicionar apenas os apps que existem
-for url_path, app_module in apps_urls:
-    if app_exists(app_module):
-        urlpatterns.append(path(url_path, include(f'{app_module}.urls')))
-    else:
-        # Criar um endpoint vazio para apps não implementados
-        urlpatterns.append(
-            path(url_path, lambda request, app=app_module: JsonResponse({
-                'error': f'App {app} não implementado ainda',
-                'status': 'em_desenvolvimento'
-            }), name=f'{app_module}-placeholder')
-        )
+# Adicionar URLs dos apps que existem
+for url_pattern, app_path in apps_urls:
+    if app_exists(app_path):
+        try:
+            urlpatterns.append(path(url_pattern, include(f'{app_path}.urls')))
+        except Exception as e:
+            # Se der erro, tenta sem o .urls
+            pass
 
-# Servir arquivos de mídia em desenvolvimento
+# Servir arquivos de média em desenvolvimento
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

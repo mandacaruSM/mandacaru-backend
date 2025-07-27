@@ -7,6 +7,7 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 from core.session import *
 from core.db import buscar_operador_por_nome, validar_data_nascimento, registrar_chat_id
+from bot_equipamento.handlers import registrar_handler_qr_code
 
 async def start_handler(message: Message):
     chat_id = str(message.chat.id)
@@ -189,6 +190,9 @@ def check_session_state(estado_esperado):
 def register_handlers(dp: Dispatcher):
     # Comando /start
     dp.message.register(start_handler, Command("start"))
+
+    # Handler para acesso via QR Code do equipamento
+    registrar_handler_qr_code(dp)
     
     # Comandos informativos
     dp.message.register(debug_session_handler, Command("debug"))
@@ -215,4 +219,5 @@ def register_handlers(dp: Dispatcher):
             "⛽ Abastecimento", "🔧 Ordem de Serviço", 
             "💰 Financeiro", "📱 QR Code", "❓ Ajuda"
         ])
+
     )
