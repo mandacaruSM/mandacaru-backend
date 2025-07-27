@@ -1,10 +1,9 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .api_views import OperadorViewSet
+# 2. Criar api_urls.py
 
-router = DefaultRouter()
-router.register(r'', OperadorViewSet)
+from django.urls import path, re_path
+from .api_views import OperadorAPIView
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('', OperadorAPIView.as_view(), name='operador-list'),
+    re_path(r'^(?P<pk>\d+)/$', OperadorAPIView.as_view(), name='operador-detail'),
 ]
