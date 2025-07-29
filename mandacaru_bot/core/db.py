@@ -534,3 +534,70 @@ async def atualizar_item_checklist(item_id: int, dados_item: Dict[str, Any]) -> 
     except Exception as e:
         logger.error(f"Erro ao atualizar item do checklist: {e}")
         return False
+
+# =============================================================
+# Novas funções para suporte ao módulo de equipamentos
+# =============================================================
+
+async def buscar_equipamentos(
+    nome: Optional[str] = None,
+    status_operacional: Optional[str] = None,
+    categoria_id: Optional[int] = None,
+    operador_id: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Busca equipamentos na API aplicando filtros opcionais.
+
+    Args:
+        nome: texto para busca (mapeado para o parâmetro ``search`` da API)
+        status_operacional: filtra pelo status operacional (ex. 'DISPONIVEL')
+        categoria_id: ID da categoria do equipamento
+        operador_id: ID do operador associado
+
+    Returns:
+        Lista de equipamentos ou lista vazia em caso de erro
+    """
+    try:
+        url = f"{API_BASE_URL}/equipamentos/"
+        params: Dict[str, Any] = {}
+        if nome:
+            params["search"] = nome
+        if status_operacional:
+            params["status_operacional"] = status_operacional
+        if categoria_id is not None:
+            params["categoria"] = categoria_id
+        if operador_id is not None:
+            params["operador_id"] = operador_id
+
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("results", []) if isinstance(data, dict) else data
+            logger.error(f"Erro ao buscar equipamentos (status {response.status_code}): {response.text}")
+        return []
+    except Exception as e:
+        logger.error(f"Erro ao buscar equipamentos: {e}")
+        return []
+
+async def obter_equipamento_por_id(equipamento_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Obtém detalhes de um equipamento pelo ID.
+
+    Args:
+        equipamento_id: identificador do equipamento
+
+    Returns:
+        Dicionário com os dados do equipamento ou None se não encontrado/erro
+    """
+    try:
+        url = f"{API_BASE_URL}/equipamentos/{equipamento_id}/"
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                return response.json()
+            logger.error(f"Equipamento {equipamento_id} não encontrado (status {response.status_code})")
+        return None
+    except Exception as e:
+        logger.error(f"Erro ao obter equipamento por ID: {e}")
+        return None

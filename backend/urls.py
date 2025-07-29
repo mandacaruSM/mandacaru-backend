@@ -51,30 +51,24 @@ def app_exists(app_path):
         return False
 
 urlpatterns = [
-    # Administração
+    # Admin
     path('admin/', admin.site.urls),
-    path('api/operadores/', include('backend.apps.operadores.urls')),
-    path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
-    path('admin/', admin.site.urls),
-    
-    # APIs existentes
+
+    # API REST
+    path('api/operadores/', include('backend.apps.operadores.api_urls')),
     path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
-    
-    # ✅ URLs ESPECÍFICAS PARA BOT
+    path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
+
+    # Endpoints específicos do bot
     path('bot/', include('backend.apps.operadores.urls_bot')),
     path('bot/', include('backend.apps.equipamentos.urls_bot')),
-    
-    
-    path('api/nr12/', include('backend.apps.nr12_checklist.urls_bot')),
-    
-    # API Root
-    path('api/', api_root, name='api-root'),
-    
-    # ✅ URLs das Views HTML (navegação web)
+    path('bot/', include('backend.apps.nr12_checklist.urls_bot')),
+
+    # Views HTML
     path('operadores/', include('backend.apps.operadores.urls')),
-    
-    # ✅ URLs da API REST (para bot e frontend)
-    path('api/operadores/', include('backend.apps.operadores.api_urls')),
+
+    # API raiz
+    path('api/', api_root, name='api-root'),
 ]
 
 # Adicionar URLs dos apps que existem
