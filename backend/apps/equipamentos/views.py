@@ -56,3 +56,4 @@ def gerar_qr_pdf(request, equipamento_id):
     p.save()
 
     return response
+

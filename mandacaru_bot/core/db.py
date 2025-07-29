@@ -1,136 +1,536 @@
-# mandacaru_bot/core/db.py - FUNÇÃO CORRIGIDA
+# =============================
+# mandacaru_bot/core/db.py (VERSÃO CORRIGIDA)
+# Adicione estas funções ao seu arquivo existente
+# =============================
+
 import httpx
-import json
-from typing import List, Dict, Any, Optional
-from core.config import API_BASE_URL, API_TIMEOUT
 import logging
+from typing import List, Dict, Any, Optional
+from .config import API_BASE_URL, API_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
-class APIError(Exception):
-    """Exceção personalizada para erros da API"""
-    pass
-
-async def fazer_requisicao_api(method: str, endpoint: str, params: dict = None, json_data: dict = None) -> Optional[Dict[str, Any]]:
-    """
-    Função corrigida para fazer requisições à API
-    """
-    url = f"{API_BASE_URL.rstrip('/')}{endpoint}"
-    
-    # Headers corretos para forçar JSON
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    
-    logger.info(f"🔗 {method} {url}")
-    if params:
-        logger.info(f"📋 Params: {params}")
-    if json_data:
-        logger.info(f"📝 Data: {json_data}")
-    
-    try:
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.request(
-                method=method,
-                url=url,
-                params=params,
-                json=json_data,
-                headers=headers
-            )
-            
-            logger.info(f"🔄 Status: {response.status_code}")
-            
-            # Log da resposta para debug
-            content_type = response.headers.get('content-type', '')
-            logger.info(f"📄 Content-Type: {content_type}")
-            
-            if response.status_code == 200:
-                # Verificar se é HTML (problema!)
-                if 'text/html' in content_type:
-                    logger.error("❌ API retornou HTML ao invés de JSON!")
-                    logger.error(f"📄 Conteúdo: {response.text[:500]}...")
-                    raise APIError("API retornou HTML ao invés de JSON - verificar configuração das rotas")
-                
-                # Tentar parseizar JSON
-                try:
-                    data = response.json()
-                    logger.info(f"✅ JSON recebido: {type(data)} com {len(data) if isinstance(data, (list, dict)) else 'N/A'} itens")
-                    return data
-                except json.JSONDecodeError as e:
-                    logger.error(f"❌ Erro ao parsear JSON: {e}")
-                    logger.error(f"📄 Resposta bruta: {response.text[:500]}")
-                    raise APIError("Resposta não é um JSON válido")
-            else:
-                logger.error(f"❌ Status {response.status_code}: {response.text}")
-                raise APIError(f"Erro HTTP {response.status_code}")
-                
-    except httpx.RequestError as e:
-        logger.error(f"❌ Erro de conexão para {url}: {e}")
-        raise APIError("Erro de conexão com o servidor")
-    except Exception as e:
-        logger.error(f"❌ Erro inesperado: {type(e).__name__}: {e}")
-        raise APIError(f"Erro interno: {str(e)}")
-
 async def buscar_operador_por_nome(nome: str) -> List[Dict[str, Any]]:
     """
-    Busca operadores pelo nome na API - VERSÃO CORRIGIDA
+    Busca operador por nome na API Django
+    
+    Args:
+        nome: Nome do operador para buscar
+        
+    Returns:
+        Lista de operadores encontrados
     """
     try:
-        params = {"search": nome}
-        logger.info(f"🔍 Buscando operador: '{nome}'")
+        url = f"{API_BASE_URL}/operadores/"
+        params = {'search': nome}
         
-        data = await fazer_requisicao_api("GET", "/operadores/", params=params)
-        
-        if data:
-            # Verificar se é resposta paginada do DRF
-            if isinstance(data, dict) and 'results' in data:
-                results = data.get('results', [])
-                logger.info(f"📋 API retornou {len(results)} resultado(s) (resposta paginada)")
-            elif isinstance(data, list):
-                results = data
-                logger.info(f"📋 API retornou {len(results)} resultado(s) (resposta direta)")
-            else:
-                logger.warning(f"⚠️ Formato de resposta inesperado: {type(data)}")
-                results = []
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
             
-            # Log detalhado para debug
-            if results:
-                for i, op in enumerate(results):
-                    nome_op = op.get('nome', 'Nome não encontrado')
-                    codigo_op = op.get('codigo', 'Código não encontrado')
-                    logger.info(f"👤 Operador {i+1}: {codigo_op} - {nome_op}")
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
             else:
-                logger.warning(f"❌ Nenhum operador encontrado para '{nome}'")
+                logger.error(f"Erro ao buscar operador: {response.status_code}")
+                return []
                 
-            return results
-        else:
-            logger.error("❌ API retornou dados vazios")
-            return []
-            
-    except APIError as e:
-        logger.error(f"❌ Erro ao buscar operador por nome '{nome}': {e}")
-        return []
     except Exception as e:
-        logger.error(f"❌ Erro inesperado na busca por '{nome}': {type(e).__name__}: {e}")
+        logger.error(f"Erro ao buscar operador por nome: {e}")
         return []
 
-# Função de teste para verificar API
-async def testar_api_operadores():
-    """Função para testar se a API está funcionando corretamente"""
+async def validar_data_nascimento(operador_id: int, data_nascimento: str) -> bool:
+    """
+    Valida data de nascimento do operador
+    
+    Args:
+        operador_id: ID do operador
+        data_nascimento: Data no formato YYYY-MM-DD ou DD/MM/YYYY
+        
+    Returns:
+        bool: True se data estiver correta
+    """
     try:
-        logger.info("🧪 Testando API de operadores...")
+        url = f"{API_BASE_URL}/operadores/{operador_id}/"
         
-        # Teste 1: Endpoint básico
-        data = await fazer_requisicao_api("GET", "/operadores/")
-        logger.info(f"✅ Endpoint básico funcionando: {type(data)}")
-        
-        # Teste 2: Busca específica
-        results = await buscar_operador_por_nome("willians")
-        logger.info(f"✅ Busca específica: {len(results)} resultados")
-        
-        return True
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            
+            if response.status_code == 200:
+                operador = response.json()
+                data_nascimento_db = operador.get('data_nascimento')
+                
+                if data_nascimento_db:
+                    # Normalizar formatos de data
+                    data_normalizada = normalizar_data(data_nascimento)
+                    data_db_normalizada = normalizar_data(data_nascimento_db)
+                    
+                    return data_normalizada == data_db_normalizada
+                    
+        return False
         
     except Exception as e:
-        logger.error(f"❌ Teste da API falhou: {e}")
+        logger.error(f"Erro ao validar data de nascimento: {e}")
+        return False
+
+async def registrar_chat_id(operador_id: int, chat_id: str) -> bool:
+    """
+    Registra/atualiza chat_id do Telegram para o operador
+    
+    Args:
+        operador_id: ID do operador
+        chat_id: ID do chat do Telegram
+        
+    Returns:
+        bool: True se registrado com sucesso
+    """
+    try:
+        url = f"{API_BASE_URL}/operadores/{operador_id}/"
+        data = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.patch(url, json=data)
+            
+            if response.status_code == 200:
+                logger.info(f"Chat ID registrado para operador {operador_id}")
+                return True
+            else:
+                logger.error(f"Erro ao registrar chat ID: {response.status_code}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Erro ao registrar chat ID: {e}")
+        return False
+
+async def verificar_status_api() -> bool:
+    """
+    Verifica se a API Django está respondendo
+    
+    Returns:
+        bool: True se API estiver funcionando
+    """
+    try:
+        url = f"{API_BASE_URL}/operadores/"
+        
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(url)
+            return response.status_code in [200, 401, 403]  # códigos aceitáveis
+            
+    except Exception as e:
+        logger.error(f"API não está respondendo: {e}")
+        return False
+
+async def obter_operador_completo(operador_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Obtém dados completos do operador
+    
+    Args:
+        operador_id: ID do operador
+        
+    Returns:
+        Dados completos do operador ou None
+    """
+    try:
+        url = f"{API_BASE_URL}/operadores/{operador_id}/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Erro ao obter operador: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao obter operador completo: {e}")
+        return None
+
+async def listar_checklists_pendentes(operador_id: int) -> List[Dict[str, Any]]:
+    """
+    Lista checklists pendentes para o operador
+    
+    Args:
+        operador_id: ID do operador
+        
+    Returns:
+        Lista de checklists pendentes
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/"
+        params = {
+            'responsavel_id': operador_id,
+            'status': 'pendente'
+        }
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
+            else:
+                logger.error(f"Erro ao listar checklists: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao listar checklists pendentes: {e}")
+        return []
+
+async def obter_checklists_operador(operador_id: int) -> List[Dict[str, Any]]:
+    """
+    Obtém checklists do operador
+    
+    Args:
+        operador_id: ID do operador
+        
+    Returns:
+        Lista de checklists
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/"
+        params = {'operador_id': operador_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
+            else:
+                logger.error(f"Erro ao obter checklists: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao obter checklists do operador: {e}")
+        return []
+
+async def iniciar_checklist(checklist_id: int, operador_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Inicia um checklist
+    
+    Args:
+        checklist_id: ID do checklist
+        operador_id: ID do operador
+        
+    Returns:
+        Dados do checklist iniciado ou None
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/{checklist_id}/iniciar/"
+        data = {'operador_id': operador_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=data)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Erro ao iniciar checklist: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao iniciar checklist: {e}")
+        return None
+
+async def salvar_resposta_checklist(checklist_id: int, item_id: int, resposta: Dict[str, Any]) -> bool:
+    """
+    Salva resposta de um item do checklist
+    
+    Args:
+        checklist_id: ID do checklist
+        item_id: ID do item
+        resposta: Dados da resposta
+        
+    Returns:
+        bool: True se salvo com sucesso
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/{checklist_id}/itens/{item_id}/responder/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=resposta)
+            
+            if response.status_code == 200:
+                return True
+            else:
+                logger.error(f"Erro ao salvar resposta: {response.status_code}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Erro ao salvar resposta do checklist: {e}")
+        return False
+
+def normalizar_data(data_str: str) -> str:
+    """
+    Normaliza formato de data para YYYY-MM-DD
+    
+    Args:
+        data_str: Data em formato string
+        
+    Returns:
+        Data normalizada no formato YYYY-MM-DD
+    """
+    if not data_str:
+        return ""
+    
+    data_str = data_str.strip()
+    
+    # Se já está no formato YYYY-MM-DD
+    if len(data_str) == 10 and data_str[4] == '-' and data_str[7] == '-':
+        return data_str
+    
+    # Se está no formato DD/MM/YYYY
+    if len(data_str) == 10 and '/' in data_str:
+        partes = data_str.split('/')
+        if len(partes) == 3:
+            dia, mes, ano = partes
+            return f"{ano}-{mes.zfill(2)}-{dia.zfill(2)}"
+    
+    # Se está no formato DD-MM-YYYY
+    if len(data_str) == 10 and data_str[2] == '-' and data_str[5] == '-':
+        partes = data_str.split('-')
+        if len(partes) == 3:
+            dia, mes, ano = partes
+            return f"{ano}-{mes.zfill(2)}-{dia.zfill(2)}"
+    
+    return data_str
+
+# =============================
+# FUNÇÕES ESPECÍFICAS PARA CADA MÓDULO
+# =============================
+
+async def obter_equipamentos_operador(operador_id: int) -> List[Dict[str, Any]]:
+    """
+    Obtém equipamentos associados ao operador
+    """
+    try:
+        url = f"{API_BASE_URL}/equipamentos/"
+        params = {'operador_id': operador_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
+            else:
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao obter equipamentos do operador: {e}")
+        return []
+
+async def listar_ordens_servico(operador_id: int, status: str = None) -> List[Dict[str, Any]]:
+    """
+    Lista ordens de serviço do operador
+    """
+    try:
+        url = f"{API_BASE_URL}/ordens-servico/"
+        params = {'solicitante_id': operador_id}
+        
+        if status:
+            params['status'] = status
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
+            else:
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao listar ordens de serviço: {e}")
+        return []
+
+async def criar_ordem_servico(dados_os: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Cria nova ordem de serviço
+    """
+    try:
+        url = f"{API_BASE_URL}/ordens-servico/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=dados_os)
+            
+            if response.status_code == 201:
+                return response.json()
+            else:
+                logger.error(f"Erro ao criar OS: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao criar ordem de serviço: {e}")
+        return None
+
+async def listar_abastecimentos(operador_id: int) -> List[Dict[str, Any]]:
+    """
+    Lista abastecimentos do operador
+    """
+    try:
+        url = f"{API_BASE_URL}/abastecimentos/"
+        params = {'operador_id': operador_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
+            else:
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao listar abastecimentos: {e}")
+        return []
+
+async def registrar_abastecimento(dados_abastecimento: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Registra novo abastecimento
+    """
+    try:
+        url = f"{API_BASE_URL}/abastecimentos/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=dados_abastecimento)
+            
+            if response.status_code == 201:
+                return response.json()
+            else:
+                logger.error(f"Erro ao registrar abastecimento: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao registrar abastecimento: {e}")
+        return None
+    
+async def obter_checklists_operador(operador_id: int) -> List[Dict[str, Any]]:
+    """
+    Obtém checklists do operador
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/"
+        params = {'operador_id': operador_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
+            else:
+                logger.error(f"Erro ao obter checklists: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao obter checklists do operador: {e}")
+        return []
+    
+async def criar_checklist(dados_checklist: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Cria novo checklist
+    
+    Args:
+        dados_checklist: Dados para criação do checklist
+        
+    Returns:
+        Dados do checklist criado ou None
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=dados_checklist)
+            
+            if response.status_code in [200, 201]:
+                return response.json()
+            else:
+                logger.error(f"Erro ao criar checklist: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao criar checklist: {e}")
+        return None
+
+async def obter_checklists_operador(operador_id: int) -> List[Dict[str, Any]]:
+    """
+    Obtém checklists do operador
+    
+    Args:
+        operador_id: ID do operador
+        
+    Returns:
+        Lista de checklists
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/"
+        params = {'operador_id': operador_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('results', [])
+            else:
+                logger.error(f"Erro ao obter checklists: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao obter checklists do operador: {e}")
+        return []
+
+async def finalizar_checklist(checklist_id: int, dados_finalizacao: Dict[str, Any]) -> bool:
+    """
+    Finaliza um checklist
+    
+    Args:
+        checklist_id: ID do checklist
+        dados_finalizacao: Dados para finalização
+        
+    Returns:
+        bool: True se finalizado com sucesso
+    """
+    try:
+        url = f"{API_BASE_URL}/checklists/{checklist_id}/finalizar/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=dados_finalizacao)
+            
+            if response.status_code == 200:
+                return True
+            else:
+                logger.error(f"Erro ao finalizar checklist: {response.status_code}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Erro ao finalizar checklist: {e}")
+        return False
+
+async def atualizar_item_checklist(item_id: int, dados_item: Dict[str, Any]) -> bool:
+    """
+    Atualiza item do checklist
+    
+    Args:
+        item_id: ID do item
+        dados_item: Dados do item
+        
+    Returns:
+        bool: True se atualizado com sucesso
+    """
+    try:
+        url = f"{API_BASE_URL}/checklist-items/{item_id}/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.patch(url, json=dados_item)
+            
+            if response.status_code == 200:
+                return True
+            else:
+                logger.error(f"Erro ao atualizar item: {response.status_code}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Erro ao atualizar item do checklist: {e}")
         return False

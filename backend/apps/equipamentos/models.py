@@ -240,40 +240,25 @@ class Equipamento(EquipamentoQRMixin, models.Model):
             self.gerar_qr_png()
 
     def get_tipo_nr12(self):
-        """
-        Retorna o tipo de equipamento NR12 associado
-        Busca primeiro por associação direta, depois por categoria
-        """
-        from backend.apps.nr12_checklist.models import TipoEquipamentoNR12
+        """Retorna o tipo NR12 do equipamento"""
+        if hasattr(self, 'tipo_nr12'):
+            return self.tipo_nr12
+        # Tentar buscar pela categoria
+        if self.categoria and hasattr(self.categoria, 'tipo_nr12_padrao'):
+            return self.categoria.tipo_nr12_padrao
+        return None
+    
+    def pode_criar_checklist(self, turno, data=None):
+        """Verifica se pode criar checklist para o turno"""
+        from django.utils import timezone
+        if data is None:
+            data = timezone.now().date()
         
-        # Verificar se há associação direta
-        if hasattr(self, 'tipo_nr12_direto'):
-            return self.tipo_nr12_direto
-        
-        # Buscar por categoria
-        if self.categoria:
-            tipo_nr12 = TipoEquipamentoNR12.objects.filter(
-                categoria_equipamento=self.categoria,
-                ativo=True
-            ).first()
-            if tipo_nr12:
-                return tipo_nr12
-        
-        # Buscar por nome/modelo similar
-        if self.modelo:
-            # Buscar tipo NR12 que contenha o modelo do equipamento
-            tipo_nr12 = TipoEquipamentoNR12.objects.filter(
-                nome__icontains=self.modelo.split()[0],  # Primeira palavra do modelo
-                ativo=True
-            ).first()
-            if tipo_nr12:
-                return tipo_nr12
-        
-        # Retornar tipo genérico se existir
-        return TipoEquipamentoNR12.objects.filter(
-            codigo='GENERICO',
-            ativo=True
-        ).first()
+        # Verificar se já existe checklist para este turno
+        return not self.checklists_nr12.filter(
+            data_realizacao=data,
+            turno=turno
+        ).exists()
     
     def get_info_para_bot(self):
         """Retorna informações do equipamento formatadas para o bot"""

@@ -54,7 +54,16 @@ urlpatterns = [
     # Administração
     path('admin/', admin.site.urls),
     path('api/operadores/', include('backend.apps.operadores.urls')),
-
+    path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
+    path('admin/', admin.site.urls),
+    
+    # APIs existentes
+    path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
+    
+    # ✅ URLs ESPECÍFICAS PARA BOT
+    path('bot/', include('backend.apps.operadores.urls_bot')),
+    path('bot/', include('backend.apps.equipamentos.urls_bot')),
+    
     
     path('api/nr12/', include('backend.apps.nr12_checklist.urls_bot')),
     
