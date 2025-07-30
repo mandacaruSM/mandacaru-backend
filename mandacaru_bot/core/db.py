@@ -804,3 +804,235 @@ async def atualizar_chat_id_operador(operador_id: int, chat_id: str) -> bool:
     except Exception as e:
         logger.error(f"Erro atualizar chat_id: {e}")
         return False
+    
+# ===============================================
+# ADICIONAR NO FINAL DO ARQUIVO: core/db.py
+# Novas funções para integração NR12
+# ===============================================
+
+async def buscar_equipamento_por_uuid(uuid_equipamento: str) -> dict:
+    """
+    ✨ NOVA: Busca equipamento pelo UUID
+    Integra com a API do sistema
+    """
+    try:
+        url = f"{API_BASE_URL}/equipamentos/por-uuid/{uuid_equipamento}/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            
+            if response.status_code == 200:
+                equipamento = response.json()
+                logger.info(f"Equipamento encontrado: {equipamento.get('nome')}")
+                return equipamento
+            else:
+                logger.warning(f"Equipamento UUID {uuid_equipamento} não encontrado: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao buscar equipamento por UUID {uuid_equipamento}: {e}")
+        return None
+
+async def buscar_equipamento_por_id(equipamento_id: int) -> dict:
+    """
+    ✨ NOVA: Busca equipamento pelo ID
+    """
+    try:
+        url = f"{API_BASE_URL}/equipamentos/{equipamento_id}/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            
+            if response.status_code == 200:
+                equipamento = response.json()
+                logger.info(f"Equipamento encontrado: {equipamento.get('nome')}")
+                return equipamento
+            else:
+                logger.warning(f"Equipamento ID {equipamento_id} não encontrado: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao buscar equipamento por ID {equipamento_id}: {e}")
+        return None
+
+async def listar_equipamentos_operador(operador_id: int) -> list:
+    """
+    📋 NOVA: Lista equipamentos autorizados para o operador
+    """
+    try:
+        url = f"{API_BASE_URL}/operadores/{operador_id}/equipamentos/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            
+            if response.status_code == 200:
+                data = response.json()
+                equipamentos = data.get('results', data) if isinstance(data, dict) else data
+                logger.info(f"Encontrados {len(equipamentos)} equipamentos para operador {operador_id}")
+                return equipamentos
+            else:
+                logger.warning(f"Erro ao buscar equipamentos do operador {operador_id}: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao listar equipamentos do operador {operador_id}: {e}")
+        return []
+
+async def buscar_checklists_operador(operador_id: int, limite: int = 10) -> list:
+    """
+    📋 NOVA: Busca checklists do operador
+    """
+    try:
+        url = f"{API_BASE_URL}/nr12/checklists/"
+        params = {
+            'operador_id': operador_id,
+            'ordering': '-data_checklist',
+            'limit': limite
+        }
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                checklists = data.get('results', data) if isinstance(data, dict) else data
+                logger.info(f"Encontrados {len(checklists)} checklists para operador {operador_id}")
+                return checklists
+            else:
+                logger.warning(f"Erro ao buscar checklists do operador {operador_id}: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao buscar checklists do operador {operador_id}: {e}")
+        return []
+
+async def buscar_checklist_por_id(checklist_id: int) -> dict:
+    """
+    📋 NOVA: Busca detalhes completos de um checklist
+    """
+    try:
+        url = f"{API_BASE_URL}/nr12/checklist-detalhes/{checklist_id}/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success'):
+                    checklist = data.get('checklist')
+                    logger.info(f"Checklist {checklist_id} encontrado")
+                    return checklist
+                else:
+                    logger.warning(f"Checklist {checklist_id} não encontrado na API")
+                    return None
+            else:
+                logger.warning(f"Erro ao buscar checklist {checklist_id}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao buscar checklist {checklist_id}: {e}")
+        return None
+
+async def verificar_checklist_em_andamento(operador_id: int) -> dict:
+    """
+    🔍 NOVA: Verifica se operador tem checklist em andamento
+    """
+    try:
+        url = f"{API_BASE_URL}/nr12/checklists/"
+        params = {
+            'operador_id': operador_id,
+            'status': 'EM_ANDAMENTO,INICIADO',
+            'data_checklist': datetime.now().date().isoformat()
+        }
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                checklists = data.get('results', data) if isinstance(data, dict) else data
+                
+                if checklists:
+                    checklist_em_andamento = checklists[0]
+                    logger.info(f"Checklist em andamento encontrado: {checklist_em_andamento.get('id')}")
+                    return checklist_em_andamento
+                else:
+                    logger.info(f"Nenhum checklist em andamento para operador {operador_id}")
+                    return None
+            else:
+                logger.warning(f"Erro ao verificar checklist em andamento: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro ao verificar checklist em andamento: {e}")
+        return None
+
+async def buscar_todos_checklists(limite: int = 50) -> list:
+    """
+    🐛 NOVA: Função debug para buscar todos os checklists
+    """
+    try:
+        url = f"{API_BASE_URL}/nr12/checklists/"
+        params = {
+            'ordering': '-data_checklist',
+            'limit': limite
+        }
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                checklists = data.get('results', data) if isinstance(data, dict) else data
+                logger.info(f"Debug: Encontrados {len(checklists)} checklists total")
+                return checklists
+            else:
+                logger.warning(f"Erro ao buscar todos os checklists: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao buscar todos os checklists: {e}")
+        return []
+
+# ===============================================
+# FUNÇÃO AUXILIAR PARA FORMATAR DADOS
+# ===============================================
+
+def formatar_checklist_para_bot(checklist: dict) -> str:
+    """
+    📝 NOVA: Formata dados do checklist para exibição no bot
+    """
+    try:
+        # Extrair dados essenciais
+        checklist_id = checklist.get('id', 'N/A')
+        turno = checklist.get('turno', 'N/A')
+        status = checklist.get('status', 'N/A')
+        data_checklist = checklist.get('data_checklist', 'N/A')
+        
+        # Dados do equipamento
+        equipamento = checklist.get('equipamento', {})
+        if isinstance(equipamento, dict):
+            nome_equipamento = equipamento.get('nome', 'N/A')
+        else:
+            nome_equipamento = str(equipamento)
+        
+        # Traduzir status
+        status_texto = {
+            'INICIADO': '🟡 Iniciado',
+            'EM_ANDAMENTO': '🔄 Em Andamento', 
+            'CONCLUIDO': '✅ Concluído',
+            'PENDENTE': '⏳ Pendente',
+            'CANCELADO': '❌ Cancelado'
+        }.get(status, f'❓ {status}')
+        
+        # Montar texto formatado
+        texto = f"📋 **Checklist #{checklist_id}**\n"
+        texto += f"🚜 {nome_equipamento}\n"
+        texto += f"🕐 {turno} - {data_checklist}\n"
+        texto += f"📊 {status_texto}"
+        
+        return texto
+        
+    except Exception as e:
+        logger.error(f"Erro ao formatar checklist: {e}")
+        return f"📋 Checklist #{checklist.get('id', 'N/A')} - Erro na formatação"

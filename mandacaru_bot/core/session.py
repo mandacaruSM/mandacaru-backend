@@ -186,3 +186,64 @@ AUTENTICADO = "AUTENTICADO"
 
 # Variável sessions para compatibilidade com admin_handlers
 sessions = _sessions
+
+async def atualizar_sessao(user_id: int, chave_ou_dados, valor=None):
+    """
+    Atualiza dados da sessão - VERSÃO COMPATÍVEL
+    Aceita tanto atualizar_sessao(user_id, dados_dict) quanto atualizar_sessao(user_id, chave, valor)
+    """
+    if user_id not in _sessions:
+        _sessions[user_id] = {
+            'criado_em': datetime.now(),
+            'ultimo_acesso': datetime.now()
+        }
+    
+    # Se valor foi passado, é o formato antigo: atualizar_sessao(user_id, "chave", valor)
+    if valor is not None:
+        _sessions[user_id][chave_ou_dados] = valor
+    else:
+        # Formato novo: atualizar_sessao(user_id, {"chave": valor})
+        if isinstance(chave_ou_dados, dict):
+            _sessions[user_id].update(chave_ou_dados)
+        else:
+            # Fallback: tratar como chave com valor None
+            _sessions[user_id][chave_ou_dados] = None
+    
+    _sessions[user_id]['ultimo_acesso'] = datetime.now()
+    logger.debug(f"Sessão atualizada para usuário {user_id}")
+
+async def limpar_sessao(user_id: int):
+    """Remove sessão do usuário"""
+    if user_id in _sessions:
+        del _sessions[user_id]
+        logger.info(f"Sessão removida para usuário {user_id}")
+        return True
+    return False
+
+# Função que estava sendo importada mas não existia
+async def remover_sessao(user_id: int):
+    """Remove sessão do usuário - ALIAS para limpar_sessao"""
+    return await limpar_sessao(user_id)
+
+# Função síncrona para compatibilidade com admin_handlers
+def limpar_sessoes_expiradas(timeout_hours: int = 24) -> int:
+    """Remove sessões expiradas - VERSÃO SÍNCRONA"""
+    agora = datetime.now()
+    timeout_delta = timedelta(hours=timeout_hours)
+    
+    sessoes_para_remover = []
+    
+    for user_id, sessao in _sessions.items():
+        ultimo_acesso = sessao.get('ultimo_acesso', sessao.get('criado_em', agora))
+        
+        if agora - ultimo_acesso > timeout_delta:
+            sessoes_para_remover.append(user_id)
+    
+    for user_id in sessoes_para_remover:
+        del _sessions[user_id]
+        logger.info(f"Sessão expirada removida para usuário {user_id}")
+    
+    if sessoes_para_remover:
+        logger.info(f"Removidas {len(sessoes_para_remover)} sessões expiradas")
+    
+    return len(sessoes_para_remover)
