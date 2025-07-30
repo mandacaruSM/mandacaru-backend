@@ -40,3 +40,12 @@ def verificar_operador_qr(request):
             'status': operador.status
         })
     return JsonResponse({'valid': False, 'message': 'Operador não encontrado'}, status=404)
+
+def get_queryset(self):
+    queryset = Operador.objects.all()
+    chat_id = self.request.query_params.get('chat_id_telegram', None)
+    
+    if chat_id:
+        queryset = queryset.filter(chat_id_telegram=chat_id)
+    
+    return queryset

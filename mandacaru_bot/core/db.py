@@ -601,3 +601,206 @@ async def obter_equipamento_por_id(equipamento_id: int) -> Optional[Dict[str, An
     except Exception as e:
         logger.error(f"Erro ao obter equipamento por ID: {e}")
         return None
+    
+async def buscar_equipamento_por_uuid(uuid_equipamento: str) -> dict:
+    """Busca equipamento pelo UUID"""
+    try:
+        url = f"{API_BASE_URL}/equipamentos/por-uuid/{uuid_equipamento}/"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                return None
+            else:
+                logger.error(f"Erro ao buscar equipamento UUID {uuid_equipamento}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro na requisição de equipamento UUID {uuid_equipamento}: {e}")
+        return None
+
+async def buscar_acoes_equipamento(equipamento_id: int, operador_id: int) -> dict:
+    """Busca ações disponíveis para equipamento e operador"""
+    try:
+        url = f"{API_BASE_URL}/bot/equipamento/{equipamento_id}/"
+        dados = {'operador_id': operador_id}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=dados, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('acoes_disponiveis', {})
+            else:
+                logger.error(f"Erro ao buscar ações do equipamento {equipamento_id}: {response.status_code}")
+                return {}
+                
+    except Exception as e:
+        logger.error(f"Erro na requisição de ações do equipamento {equipamento_id}: {e}")
+        return {}
+
+async def buscar_equipamento_por_uuid(uuid_equipamento: str) -> dict:
+    """Busca equipamento pelo UUID"""
+    try:
+        url = f"{API_BASE_URL}/equipamentos/por-uuid/{uuid_equipamento}/"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                return None
+            else:
+                logger.error(f"Erro ao buscar equipamento UUID {uuid_equipamento}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro na requisição de equipamento UUID {uuid_equipamento}: {e}")
+        return None
+
+# ===============================================
+# ADICIONAR NO FINAL DO ARQUIVO: mandacaru_bot/core/db.py
+# ===============================================
+
+async def buscar_equipamento_por_uuid(uuid_equipamento: str) -> dict:
+    """Busca equipamento pelo UUID"""
+    try:
+        url = f"{API_BASE_URL}/equipamentos/por-uuid/{uuid_equipamento}/"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                return None
+            else:
+                logger.error(f"Erro ao buscar equipamento UUID {uuid_equipamento}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro na requisição de equipamento UUID {uuid_equipamento}: {e}")
+        return None
+
+async def buscar_operador_por_chat_id(chat_id: str) -> dict:
+    """Busca operador pelo chat_id do Telegram"""
+    try:
+        url = f"{API_BASE_URL}/operadores/"
+        params = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('results') and len(data['results']) > 0:
+                    operador = data['results'][0]
+                    logger.info(f"Operador encontrado por chat_id: {operador.get('nome')}")
+                    return operador
+                else:
+                    logger.info(f"Nenhum operador encontrado com chat_id: {chat_id}")
+                    return None
+            else:
+                logger.error(f"Erro ao buscar operador por chat_id {chat_id}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro na requisição de operador por chat_id {chat_id}: {e}")
+        return None
+    
+# ===============================================
+# ADICIONAR NO FINAL DE: mandacaru_bot/core/db.py
+# ===============================================
+
+async def atualizar_chat_id_operador(operador_id: int, chat_id: str) -> bool:
+    """Atualiza chat_id do operador no banco"""
+    try:
+        url = f"{API_BASE_URL}/operadores/{operador_id}/"
+        data = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(url, json=data, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                logger.info(f"Chat ID atualizado para operador {operador_id}: {chat_id}")
+                return True
+            else:
+                logger.error(f"Erro ao atualizar chat ID operador {operador_id}: {response.status_code}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Erro na requisição de atualização chat ID: {e}")
+        return False
+
+async def buscar_operador_por_chat_id(chat_id: str) -> dict:
+    """Busca operador pelo chat_id do Telegram"""
+    try:
+        url = f"{API_BASE_URL}/operadores/"
+        params = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('results') and len(data['results']) > 0:
+                    operador = data['results'][0]
+                    logger.info(f"Operador encontrado por chat_id: {operador.get('nome')}")
+                    return operador
+                else:
+                    logger.info(f"Nenhum operador encontrado com chat_id: {chat_id}")
+                    return None
+            else:
+                logger.error(f"Erro ao buscar operador por chat_id {chat_id}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Erro na requisição de operador por chat_id {chat_id}: {e}")
+        return None
+    
+async def buscar_operador_por_chat_id(chat_id: str) -> dict:
+    try:
+        url = f"{API_BASE_URL}/operadores/"
+        params = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('results') and len(data['results']) > 0:
+                    return data['results'][0]
+            return None
+    except Exception as e:
+        logger.error(f"Erro buscar operador por chat_id: {e}")
+        return None
+
+async def buscar_equipamento_por_uuid(uuid_equipamento: str) -> dict:
+    try:
+        url = f"{API_BASE_URL}/equipamentos/por-uuid/{uuid_equipamento}/"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=API_TIMEOUT)
+            
+            if response.status_code == 200:
+                return response.json()
+            return None
+    except Exception as e:
+        logger.error(f"Erro buscar equipamento UUID: {e}")
+        return None
+
+async def atualizar_chat_id_operador(operador_id: int, chat_id: str) -> bool:
+    try:
+        url = f"{API_BASE_URL}/operadores/{operador_id}/"
+        data = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(url, json=data, timeout=API_TIMEOUT)
+            return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Erro atualizar chat_id: {e}")
+        return False

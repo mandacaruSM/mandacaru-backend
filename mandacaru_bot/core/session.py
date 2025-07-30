@@ -1,172 +1,188 @@
-# =====================
-# core/session.py (com timeout automático)
-# =====================
+# ===============================================
+# ARQUIVO COMPLETO: mandacaru_bot/core/session.py
+# ===============================================
 
+import logging
+from typing import Dict, Optional
+from enum import Enum
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
+
+class SessionState(Enum):
+    AGUARDANDO_NOME = "AGUARDANDO_NOME"
+    AGUARDANDO_DATA_NASCIMENTO = "AGUARDANDO_DATA_NASCIMENTO"
+    AUTENTICADO = "AUTENTICADO"
 
 # Armazenamento em memória das sessões
-sessions: Dict[str, Dict[str, Any]] = {}
+_sessions: Dict[int, Dict] = {}
 
-# Configuração de timeout (10 minutos)
-SESSION_TIMEOUT_MINUTES = 10
-
-class SessionState:
-    """Estados possíveis da sessão"""
-    AGUARDANDO_NOME = "AGUARDANDO_NOME"
-    AGUARDANDO_DATA = "AGUARDANDO_DATA"
-    AUTENTICADO = "AUTENTICADO"
-    CHECKLIST_ATIVO = "CHECKLIST_ATIVO"
-    ABASTECIMENTO_ATIVO = "ABASTECIMENTO_ATIVO"
-    OS_ATIVO = "OS_ATIVO"
-    FINANCEIRO_ATIVO = "FINANCEIRO_ATIVO"
-    QRCODE_ATIVO = "QRCODE_ATIVO"
-    EXPIRADA = "EXPIRADA"
-
-def iniciar_sessao(chat_id: str) -> None:
-    """Inicia uma nova sessão para o chat_id"""
-    sessions[chat_id] = {
-        "estado": SessionState.AGUARDANDO_NOME,
-        "criado_em": datetime.now(),
-        "ultimo_acesso": datetime.now(),
-        "operador": None,
-        "dados_temporarios": {},
-        "timeout_notificado": False
+async def iniciar_sessao(user_id: int, operador_data: dict, estado: str = 'AUTENTICADO'):
+    """Inicia uma nova sessão para o usuário"""
+    _sessions[user_id] = {
+        'estado': estado,
+        'operador': operador_data,
+        'operador_id': operador_data.get('id'),
+        'operador_nome': operador_data.get('nome'),
+        'ativo': True,
+        'criado_em': datetime.now(),
+        'ultimo_acesso': datetime.now()
     }
+    logger.info(f"Sessão iniciada para usuário {user_id}: {operador_data.get('nome')}")
 
-def atualizar_sessao(chat_id: str, chave: str, valor: Any) -> None:
-    """Atualiza um valor específico na sessão"""
-    if chat_id in sessions:
-        sessions[chat_id][chave] = valor
-        sessions[chat_id]["ultimo_acesso"] = datetime.now()
-        # Reset do timeout quando há atividade
-        sessions[chat_id]["timeout_notificado"] = False
-
-def obter_sessao(chat_id: str) -> Dict[str, Any]:
-    """Retorna os dados da sessão ou um dict vazio"""
-    sessao = sessions.get(chat_id, {})
+async def obter_sessao(user_id: int) -> Optional[dict]:
+    """Obtém dados da sessão do usuário"""
+    sessao = _sessions.get(user_id)
     if sessao:
-        # Verificar se a sessão expirou
-        if is_session_expired(chat_id):
-            limpar_sessao(chat_id)
-            return {}
-        else:
-            sessao["ultimo_acesso"] = datetime.now()
+        # Atualizar último acesso
+        sessao['ultimo_acesso'] = datetime.now()
     return sessao
 
-def limpar_sessao(chat_id: str) -> None:
-    """Remove completamente uma sessão"""
-    sessions.pop(chat_id, None)
+async def obter_operador_sessao(user_id: int) -> Optional[dict]:
+    """Obtém dados do operador autenticado"""
+    sessao = _sessions.get(user_id)
+    if sessao and sessao.get('estado') == 'AUTENTICADO':
+        # Atualizar último acesso
+        sessao['ultimo_acesso'] = datetime.now()
+        return sessao.get('operador')
+    return None
 
-def obter_operador(chat_id: str) -> Optional[Dict[str, Any]]:
-    """Retorna os dados do operador autenticado"""
-    sessao = sessions.get(chat_id, {})
-    if is_session_expired(chat_id):
-        return None
-    return sessao.get("operador")
-
-def esta_autenticado(chat_id: str) -> bool:
-    """Verifica se o usuário está autenticado e a sessão não expirou"""
-    if is_session_expired(chat_id):
-        return False
-    sessao = sessions.get(chat_id, {})
-    return sessao.get("estado") == SessionState.AUTENTICADO and sessao.get("operador") is not None
-
-def is_session_expired(chat_id: str) -> bool:
-    """Verifica se a sessão expirou (10 minutos de inatividade)"""
-    if chat_id not in sessions:
-        return True
+async def atualizar_sessao(user_id: int, dados: dict):
+    """Atualiza dados da sessão"""
+    if user_id not in _sessions:
+        _sessions[user_id] = {
+            'criado_em': datetime.now(),
+            'ultimo_acesso': datetime.now()
+        }
     
-    sessao = sessions[chat_id]
-    ultimo_acesso = sessao.get("ultimo_acesso", datetime.now())
-    tempo_limite = datetime.now() - timedelta(minutes=SESSION_TIMEOUT_MINUTES)
-    
-    return ultimo_acesso < tempo_limite
+    _sessions[user_id].update(dados)
+    _sessions[user_id]['ultimo_acesso'] = datetime.now()
+    logger.debug(f"Sessão atualizada para usuário {user_id}")
 
-def get_session_time_remaining(chat_id: str) -> int:
-    """Retorna os minutos restantes até a sessão expirar"""
-    if chat_id not in sessions:
-        return 0
-    
-    sessao = sessions[chat_id]
-    ultimo_acesso = sessao.get("ultimo_acesso", datetime.now())
-    tempo_limite = ultimo_acesso + timedelta(minutes=SESSION_TIMEOUT_MINUTES)
-    tempo_restante = tempo_limite - datetime.now()
-    
-    return max(0, int(tempo_restante.total_seconds() / 60))
+async def limpar_sessao(user_id: int):
+    """Remove sessão do usuário"""
+    if user_id in _sessions:
+        del _sessions[user_id]
+        logger.info(f"Sessão removida para usuário {user_id}")
 
-def marcar_timeout_notificado(chat_id: str) -> None:
-    """Marca que o usuário foi notificado sobre o timeout"""
-    if chat_id in sessions:
-        sessions[chat_id]["timeout_notificado"] = True
+async def verificar_autenticacao(user_id: int) -> bool:
+    """Verifica se usuário está autenticado"""
+    sessao = _sessions.get(user_id)
+    return sessao and sessao.get('estado') == 'AUTENTICADO'
 
-def ja_foi_notificado_timeout(chat_id: str) -> bool:
-    """Verifica se o usuário já foi notificado sobre o timeout"""
-    if chat_id not in sessions:
-        return False
-    return sessions[chat_id].get("timeout_notificado", False)
+async def obter_estado_sessao(user_id: int) -> Optional[str]:
+    """Obtém estado atual da sessão"""
+    sessao = _sessions.get(user_id)
+    return sessao.get('estado') if sessao else None
 
-def definir_dados_temporarios(chat_id: str, dados: Dict[str, Any]) -> None:
-    """Define dados temporários para o contexto atual"""
-    if chat_id in sessions:
-        sessions[chat_id]["dados_temporarios"] = dados
-        sessions[chat_id]["ultimo_acesso"] = datetime.now()
+def listar_sessoes_ativas() -> int:
+    """Retorna número de sessões ativas"""
+    return len(_sessions)
 
-def obter_dados_temporarios(chat_id: str) -> Dict[str, Any]:
-    """Obtém dados temporários da sessão"""
-    sessao = sessions.get(chat_id, {})
-    if is_session_expired(chat_id):
-        return {}
-    return sessao.get("dados_temporarios", {})
+def limpar_todas_sessoes():
+    """Remove todas as sessões (para limpeza)"""
+    global _sessions
+    _sessions.clear()
+    logger.info("Todas as sessões foram removidas")
 
-def limpar_dados_temporarios(chat_id: str) -> None:
-    """Limpa apenas os dados temporários, mantendo a sessão"""
-    if chat_id in sessions:
-        sessions[chat_id]["dados_temporarios"] = {}
-        sessions[chat_id]["ultimo_acesso"] = datetime.now()
-
-def limpar_sessoes_expiradas(tempo_limite_horas: int = 24) -> int:
-    """Remove sessões antigas (útil para limpeza periódica)"""
+async def limpar_sessoes_expiradas(timeout_hours: int = 24):
+    """Remove sessões expiradas - FUNÇÃO QUE ESTAVA FALTANDO"""
     agora = datetime.now()
-    limite = agora - timedelta(hours=tempo_limite_horas)
+    timeout_delta = timedelta(hours=timeout_hours)
     
     sessoes_para_remover = []
-    for chat_id, sessao in sessions.items():
-        ultimo_acesso = sessao.get("ultimo_acesso", agora)
-        if ultimo_acesso < limite:
-            sessoes_para_remover.append(chat_id)
     
-    for chat_id in sessoes_para_remover:
-        sessions.pop(chat_id, None)
+    for user_id, sessao in _sessions.items():
+        ultimo_acesso = sessao.get('ultimo_acesso', sessao.get('criado_em', agora))
+        
+        if agora - ultimo_acesso > timeout_delta:
+            sessoes_para_remover.append(user_id)
+    
+    for user_id in sessoes_para_remover:
+        del _sessions[user_id]
+        logger.info(f"Sessão expirada removida para usuário {user_id}")
+    
+    if sessoes_para_remover:
+        logger.info(f"Removidas {len(sessoes_para_remover)} sessões expiradas")
     
     return len(sessoes_para_remover)
 
-def obter_sessoes_proximas_expiracao() -> list:
-    """Retorna lista de chat_ids com sessões que expiram em 2 minutos"""
-    sessoes_proximas = []
+def obter_estatisticas_sessoes() -> dict:
+    """Retorna estatísticas das sessões"""
     agora = datetime.now()
     
-    for chat_id, sessao in sessions.items():
-        if sessao.get("estado") == SessionState.AUTENTICADO:
-            ultimo_acesso = sessao.get("ultimo_acesso", agora)
-            tempo_limite = ultimo_acesso + timedelta(minutes=SESSION_TIMEOUT_MINUTES)
-            tempo_restante = tempo_limite - agora
-            
-            # Se restam menos de 2 minutos e ainda não foi notificado
-            if 0 < tempo_restante.total_seconds() < 120 and not ja_foi_notificado_timeout(chat_id):
-                sessoes_proximas.append(chat_id)
-    
-    return sessoes_proximas
-
-def obter_estatisticas_sessoes() -> Dict[str, int]:
-    """Retorna estatísticas das sessões ativas"""
-    total = len(sessions)
-    autenticados = sum(1 for s in sessions.values() if s.get("estado") == SessionState.AUTENTICADO)
-    expiradas = sum(1 for chat_id in sessions.keys() if is_session_expired(chat_id))
-    
-    return {
-        "total_sessoes": total,
-        "usuarios_autenticados": autenticados - expiradas,
-        "aguardando_autenticacao": total - autenticados,
-        "sessoes_expiradas": expiradas
+    estatisticas = {
+        'total_sessoes': len(_sessions),
+        'autenticadas': 0,
+        'aguardando_nome': 0,
+        'aguardando_data': 0,
+        'sessoes_ativas_1h': 0,
+        'sessoes_ativas_24h': 0
     }
+    
+    for sessao in _sessions.values():
+        estado = sessao.get('estado', '')
+        
+        if estado == 'AUTENTICADO':
+            estatisticas['autenticadas'] += 1
+        elif estado == 'AGUARDANDO_NOME':
+            estatisticas['aguardando_nome'] += 1
+        elif estado == 'AGUARDANDO_DATA_NASCIMENTO':
+            estatisticas['aguardando_data'] += 1
+        
+        ultimo_acesso = sessao.get('ultimo_acesso', sessao.get('criado_em', agora))
+        
+        if agora - ultimo_acesso <= timedelta(hours=1):
+            estatisticas['sessoes_ativas_1h'] += 1
+        
+        if agora - ultimo_acesso <= timedelta(hours=24):
+            estatisticas['sessoes_ativas_24h'] += 1
+    
+    return estatisticas
+
+# Função adicional para compatibilidade
+async def iniciar_nova_sessao(user_id: int, estado: str = 'AGUARDANDO_NOME'):
+    """Inicia uma nova sessão vazia"""
+    await limpar_sessao(user_id)
+    await atualizar_sessao(user_id, {'estado': estado})
+
+# FUNÇÕES ADICIONAIS QUE PODEM ESTAR SENDO IMPORTADAS
+async def esta_autenticado(user_id: int) -> bool:
+    """Verifica se usuário está autenticado - ALIAS para verificar_autenticacao"""
+    return await verificar_autenticacao(user_id)
+
+async def obter_operador(user_id: int) -> Optional[dict]:
+    """Obtém operador da sessão - ALIAS para obter_operador_sessao"""
+    return await obter_operador_sessao(user_id)
+
+async def criar_sessao(user_id: int, operador_data: dict, estado: str = 'AUTENTICADO'):
+    """Cria sessão - ALIAS para iniciar_sessao"""
+    return await iniciar_sessao(user_id, operador_data, estado)
+
+def obter_sessoes_ativas() -> int:
+    """Retorna número de sessões ativas - ALIAS"""
+    return listar_sessoes_ativas()
+
+async def limpar_sessao_usuario(user_id: int):
+    """Remove sessão do usuário - ALIAS"""
+    return await limpar_sessao(user_id)
+
+def get_session_count() -> int:
+    """Conta sessões - ALIAS em inglês"""
+    return len(_sessions)
+
+async def cleanup_expired_sessions(timeout_hours: int = 24) -> int:
+    """Limpa sessões expiradas - ALIAS em inglês"""
+    return await limpar_sessoes_expiradas(timeout_hours)
+
+def get_session_stats() -> dict:
+    """Estatísticas - ALIAS em inglês"""
+    return obter_estatisticas_sessoes()
+
+# Estados da sessão como strings (para compatibilidade)
+AGUARDANDO_NOME = "AGUARDANDO_NOME"
+AGUARDANDO_DATA_NASCIMENTO = "AGUARDANDO_DATA_NASCIMENTO"
+AUTENTICADO = "AUTENTICADO"
+
+# Variável sessions para compatibilidade com admin_handlers
+sessions = _sessions

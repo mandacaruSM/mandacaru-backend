@@ -245,3 +245,12 @@ class SuccessMessages:
     @staticmethod
     def atualizado_sucesso(item: str) -> str:
         return f"✅ {item} atualizado com sucesso!"
+    
+from datetime import datetime
+
+def validar_data_nascimento(data_str: str):
+    """Valida formato de data DD/MM/AAAA"""
+    try:
+        return datetime.strptime(data_str, '%d/%m/%Y').date()
+    except ValueError:
+        return None
