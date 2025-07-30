@@ -6,6 +6,20 @@ import re
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram import F
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import StateFilter
+from core.session import SessionState
+from core.db import (
+    buscar_operador_por_nome, 
+    buscar_operador_por_chat_id,
+    buscar_equipamento_por_uuid,
+    atualizar_chat_id_operador
+)
+import logging
+import re
+
+logger = logging.getLogger(__name__)
 
 class Validators:
     """Classe com métodos de validação"""
@@ -254,3 +268,19 @@ def validar_data_nascimento(data_str: str):
         return datetime.strptime(data_str, '%d/%m/%Y').date()
     except ValueError:
         return None
+
+def register_handlers(dp):
+    """Registra todos os handlers principais"""
+    
+    # Handler específico para QR codes (DEVE VIR PRIMEIRO!)
+    dp.message.register(handle_qr_code_start, F.text.startswith('/start eq_'))
+    
+    # Handler padrão para /start (DEVE VIR DEPOIS)
+    dp.message.register(start_command, F.text == '/start')
+    
+    # Handlers de autenticação
+    dp.message.register(handle_nome, StateFilter(SessionState.AGUARDANDO_NOME))
+    dp.message.register(handle_data_nascimento, StateFilter(SessionState.AGUARDANDO_DATA_NASCIMENTO))
+    
+    # Outros handlers (se existirem)
+    # dp.message.register(outros_handlers...)

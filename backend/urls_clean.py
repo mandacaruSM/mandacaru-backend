@@ -58,28 +58,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     # API REST
-    
-    
-    
-
-    # MOVER ESTAS LINHAS PARA ANTES das URLs com include:
-    path('api/equipamentos/', equipamentos_publicos, name='equipamentos-publicos'),
-    path('api/checklists/', checklists_bot, name='checklists-bot'),
-    path('api/nr12/checklists/', checklists_bot, name='nr12-checklists-bot'),
-    path('api/operadores/<int:operador_id>/equipamentos/', equipamentos_operador, name='operador-equipamentos'),
-    path('api/equipamentos/<int:equipamento_id>/checklists/', checklists_equipamento, name='equipamento-checklists'),
-    path('api/operadores/<int:operador_id>/', atualizar_operador, name='atualizar-operador'),
-
-    # DEPOIS colocar as URLs com include:
     path('api/operadores/', include('backend.apps.operadores.api_urls')),
-    path('api/equipamentos/admin/', include('backend.apps.equipamentos.urls')),  # Mudar para /admin/
-    path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
     path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
+    path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
 
     # Endpoints específicos do bot
-#    path('bot/', include('backend.apps.operadores.urls_bot')),
-#    path('bot/', include('backend.apps.equipamentos.urls_bot')),
-#    path('bot/', include('backend.apps.nr12_checklist.urls_bot')),
 
     # Views HTML
     path('operadores/', include('backend.apps.operadores.urls')),
@@ -87,8 +70,12 @@ urlpatterns = [
     # API raiz
     path('api/', api_root, name='api-root'),
 
-#    path('api/nr12/bot/', include('backend.apps.nr12_checklist.urls_bot_corrigido')),
-
+    path('api/checklists/', checklists_bot, name='checklists-bot'),
+    path('api/nr12/checklists/', checklists_bot, name='nr12-checklists-bot'),
+    path('api/equipamentos/', equipamentos_publicos, name='equipamentos-publicos'),
+    path('api/operadores/<int:operador_id>/equipamentos/', equipamentos_operador, name='operador-equipamentos'),
+    path('api/equipamentos/<int:equipamento_id>/checklists/', checklists_equipamento, name='equipamento-checklists'),
+    path('api/operadores/<int:operador_id>/', atualizar_operador, name='atualizar-operador'),
 ]
 
 
