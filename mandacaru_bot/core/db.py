@@ -7,8 +7,37 @@ import httpx
 import logging
 from typing import List, Dict, Any, Optional
 from .config import API_BASE_URL, API_TIMEOUT
+from core.config import API_BASE_URL, API_TIMEOUT
+from datetime import date
 
 logger = logging.getLogger(__name__)
+
+async def buscar_equipamento_por_chat_id(chat_id: str) -> dict:
+    """Busca o equipamento vinculado a um chat_id"""
+    try:
+        url = f"{API_BASE_URL}/api/equipamentos/chat/{chat_id}/"
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                return response.json()
+    except Exception as e:
+        print(f"[ERRO] buscar_equipamento_por_chat_id: {e}")
+    return None
+
+async def get_checklist_do_dia(equipamento_id: int) -> dict:
+    """Busca o checklist do dia para o equipamento"""
+    try:
+        url = f"{API_BASE_URL}/api/nr12/checklists/?equipamento_id={equipamento_id}&data_checklist={date.today()}"
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list) and data:
+                    return data[0]  # retorna o primeiro checklist do dia
+    except Exception as e:
+        print(f"[ERRO] get_checklist_do_dia: {e}")
+    return None
+
 
 async def buscar_operador_por_nome(nome: str) -> List[Dict[str, Any]]:
     """

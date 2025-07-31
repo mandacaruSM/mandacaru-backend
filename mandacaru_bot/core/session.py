@@ -6,6 +6,7 @@ import logging
 from typing import Dict, Optional
 from enum import Enum
 from datetime import datetime, timedelta
+from .db import buscar_equipamento_por_chat_id
 
 logger = logging.getLogger(__name__)
 
@@ -247,3 +248,7 @@ async def limpar_sessoes_expiradas(timeout_hours: int = 24) -> int:
         logger.info(f"Removidas {len(sessoes_para_remover)} sessões expiradas")
     
     return len(sessoes_para_remover)
+
+async def obter_equipamento_atual(chat_id: str) -> dict:
+    """Obtém o equipamento atual vinculado ao chat"""
+    return await buscar_equipamento_por_chat_id(chat_id)

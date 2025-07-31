@@ -1,7 +1,7 @@
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.utils.timezone import now
 from datetime import date
@@ -22,7 +22,7 @@ from .serializers import (
 class TipoEquipamentoNR12ViewSet(viewsets.ModelViewSet):
     queryset = TipoEquipamentoNR12.objects.all()
     serializer_class = TipoEquipamentoNR12Serializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ['nome', 'descricao']
     ordering = ['nome']
@@ -31,7 +31,7 @@ class TipoEquipamentoNR12ViewSet(viewsets.ModelViewSet):
 class ItemChecklistPadraoViewSet(viewsets.ModelViewSet):
     queryset = ItemChecklistPadrao.objects.all()
     serializer_class = ItemChecklistPadraoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['tipo_equipamento', 'criticidade', 'ativo']
     search_fields = ['item', 'descricao']
@@ -40,7 +40,7 @@ class ItemChecklistPadraoViewSet(viewsets.ModelViewSet):
 
 class ChecklistNR12ViewSet(viewsets.ModelViewSet):
     serializer_class = ChecklistNR12Serializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'turno', 'equipamento', 'equipamento__cliente']
     search_fields = ['equipamento__nome', 'responsavel__username']
@@ -133,7 +133,7 @@ class ChecklistNR12ViewSet(viewsets.ModelViewSet):
 
 class ItemChecklistRealizadoViewSet(viewsets.ModelViewSet):
     serializer_class = ItemChecklistRealizadoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         queryset = ItemChecklistRealizado.objects.select_related('checklist', 'item_padrao', 'verificado_por')
@@ -150,7 +150,7 @@ class ItemChecklistRealizadoViewSet(viewsets.ModelViewSet):
 
 class AlertaManutencaoViewSet(viewsets.ModelViewSet):
     serializer_class = AlertaManutencaoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'tipo', 'criticidade', 'equipamento']
     search_fields = ['titulo', 'descricao', 'equipamento__nome']

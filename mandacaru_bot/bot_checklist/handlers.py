@@ -1,8 +1,18 @@
 # bot_checklist/handlers.py (versão corrigida)
 
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram import F
+from core.db import get_checklist_do_dia
+from core.session import obter_equipamento_atual
+from aiogram.types import CallbackQuery
+from datetime import date
 from aiogram import Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
+from core.db import get_checklist_do_dia
+from core.session import obter_equipamento_atual
+from aiogram import types
 from core.session import (
     atualizar_sessao,
     obter_sessao,
@@ -288,3 +298,60 @@ def register_handlers(dp: Dispatcher):
     dp.message.register(processar_descricao_checklist, F.text & ~F.text.startswith('/'), check_session_state("CRIANDO_CHECKLIST"))
     dp.callback_query.register(callback_checklist_tipo, F.data.startswith("checklist_tipo_"))
     dp.callback_query.register(callback_relatorio, F.data.startswith("relatorio_"))
+    dp.callback_query.register(ver_checklist_de_hoje, F.data == "ver_checklist_hoje")
+
+@dp.callback_query(F.data.startswith("ver_checklist_hoje"))
+async def ver_checklist_de_hoje(callback: types.CallbackQuery):
+    chat_id = str(callback.from_user.id)
+    equipamento = await obter_equipamento_atual(chat_id)
+
+    if not equipamento:
+        await callback.message.answer("❌ Nenhum equipamento selecionado.")
+        return
+
+    equipamento_id = equipamento.get("id")
+    checklist = await get_checklist_do_dia(equipamento_id)
+
+    if not checklist:
+        await callback.message.answer("❌ Nenhum checklist encontrado para hoje.")
+        return
+
+    texto = (
+        f"<b>Checklist de hoje:</b>\n"
+        f"Equipamento: {equipamento['nome']}\n"
+        f"Data: {checklist['data_checklist']}\n"
+        f"Status: {checklist['status']}"
+    )
+    await callback.message.answer(texto, parse_mode="HTML")
+    await callback.answer()
+
+    router.callback_query.register(ver_checklist_de_hoje, F.data.startswith("ver_checklist_hoje"))
+
+async def ver_checklist_de_hoje(callback: CallbackQuery):
+    chat_id = str(callback.from_user.id)
+    equipamento = await obter_equipamento_atual(chat_id)
+
+    if not equipamento:
+        await callback.message.answer("❌ Nenhum equipamento selecionado.")
+        await callback.answer()
+        return
+
+    equipamento_id = equipamento.get("id")
+    checklist = await get_checklist_do_dia(equipamento_id)
+
+    if not checklist:
+        await callback.message.answer("📭 Nenhum checklist encontrado para hoje.")
+        await callback.answer()
+        return
+
+    texto = (
+        f"<b>📋 Checklist de Hoje</b>\n"
+        f"<b>Equipamento:</b> {equipamento['nome']}\n"
+        f"<b>Data:</b> {checklist['data_checklist']}\n"
+        f"<b>Status:</b> {checklist['status']}\n"
+        f"<b>Itens:</b> {checklist['itens_ok']} OK / {checklist['itens_nok']} NOK / {checklist['itens_pendentes']} pendentes\n"
+        f"🔗 <a href='{checklist['qr_code_url']}'>Ver Checklist Online</a>"
+    )
+
+    await callback.message.answer(texto, parse_mode="HTML")
+    await callback.answer()

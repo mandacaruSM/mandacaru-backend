@@ -1,12 +1,7 @@
-"""
-Bot Mandacaru - Handlers Principais
-Autenticação e roteamento para módulos
-"""
-
 import logging
 import re
 from datetime import datetime, date
-from aiogram import Dispatcher, F
+from aiogram import Dispatcher, F, types, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -19,18 +14,46 @@ from typing import Optional
 from core.config import API_BASE_URL, API_TIMEOUT
 from core.session import (
     iniciar_sessao, obter_sessao, atualizar_sessao, 
-    limpar_sessao, obter_operador_sessao, obter_estado_sessao
+    limpar_sessao, obter_operador_sessao, obter_estado_sessao, obter_equipamento_atual
 )
 from core.db import (
     buscar_operador_por_nome, 
     buscar_operador_por_chat_id,
     buscar_equipamento_por_uuid,
-    atualizar_chat_id_operador
+    atualizar_chat_id_operador,
+    get_checklist_do_dia
 )
 from core.templates import MessageTemplates
 from core.utils import Validators
+from core.middleware import require_auth
 
 logger = logging.getLogger(__name__)
+
+router = Router()
+
+@router.callback_query(F.data.startswith("checklist_"))
+@require_auth
+async def processar_checklist_callback(callback: types.CallbackQuery, operador: dict):
+    chat_id = callback.from_user.id
+    equipamento = await obter_equipamento_atual(str(chat_id))
+    if not equipamento:
+        await callback.message.answer("❌ Nenhum equipamento selecionado.")
+        return
+
+    equipamento_id = equipamento.get("id")
+    checklist = await get_checklist_do_dia(equipamento_id)
+    if not checklist:
+        await callback.message.answer("❌ Nenhum checklist encontrado para hoje.")
+        return
+
+    texto = (
+        f"<b>Checklist de hoje:</b>\n"
+        f"Equipamento: {equipamento['nome']}\n"
+        f"Data: {checklist['data_checklist']}\n"
+        f"Status: {checklist['status']}"
+    )
+    await callback.message.answer(texto, parse_mode="HTML")
+    await callback.answer()
 
 # ===============================================
 # ESTADOS FSM
@@ -80,7 +103,7 @@ async def start_handler(message: Message, state: FSMContext):
                 "✅ Login automático realizado com sucesso.\n\n"
                 "🏠 Use o menu abaixo para navegar:",
                 reply_markup=criar_menu_principal(),
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             return
         
@@ -235,7 +258,7 @@ async def process_birth_date(message: Message, state: FSMContext):
                 f"✅ **Login realizado com sucesso!**\n\n"
                 f"👋 Bem-vindo, {operador['nome']}!\n\n"
                 f"🚜 Acessando equipamento **{equipamento_qr.get('nome')}**...",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             await mostrar_menu_equipamento(message, equipamento_qr, operador)
         else:
@@ -280,7 +303,7 @@ async def handle_qr_code_start(message: Message, state: FSMContext):
             await message.answer(
                 "❌ **Equipamento Não Encontrado**\n\n"
                 "O QR Code escaneado não corresponde a nenhum equipamento válido.",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             return
         
@@ -303,7 +326,7 @@ async def handle_qr_code_start(message: Message, state: FSMContext):
                 f"👋 **Bem-vindo de volta, {operador_banco.get('nome')}!**\n\n"
                 f"📱 Login automático realizado.\n"
                 f"🚜 Acessando equipamento **{equipamento_data.get('nome')}**...",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
             await mostrar_menu_equipamento(message, equipamento_data, operador_banco)
@@ -319,7 +342,7 @@ async def handle_qr_code_start(message: Message, state: FSMContext):
             f"📱 **QR Code: {equipamento_data.get('nome', 'Equipamento')}**\n\n"
             "🔐 Para acessar este equipamento, primeiro faça seu login.\n\n"
             "👤 **Informe seu nome completo:**",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.set_state(AuthStates.waiting_for_name)
@@ -329,7 +352,7 @@ async def handle_qr_code_start(message: Message, state: FSMContext):
         await message.answer(
             f"❌ **Erro no QR Code**\n\n"
             f"Ocorreu um erro: {str(e)}",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
 
 # ===============================================
@@ -397,7 +420,7 @@ async def mostrar_menu_equipamento(message: Message, equipamento_data: dict, ope
         await message.answer(
             mensagem,
             reply_markup=markup,
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
     except Exception as e:
@@ -440,7 +463,7 @@ async def handle_menu_callback(callback: CallbackQuery):
                 "• Aprender a usar\n\n"
                 "Escolha uma opção:",
                 reply_markup=markup,
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
         elif data == "menu_principal":
@@ -449,7 +472,7 @@ async def handle_menu_callback(callback: CallbackQuery):
                 f"👋 Olá, {operador.get('nome')}!\n\n"
                 "Escolha uma opção:",
                 reply_markup=criar_menu_principal(),
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
         elif data == "menu_ajuda":
@@ -461,14 +484,14 @@ async def handle_menu_callback(callback: CallbackQuery):
                 "3. Escaneie QR codes dos equipamentos\n\n"
                 "🆘 **Precisa de ajuda?**\n"
                 "Entre em contato com o suporte técnico.",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
         else:
             await callback.message.answer(
                 f"🚧 **{data.replace('menu_', '').title()}**\n\n"
                 "Este módulo está em desenvolvimento.",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
     except Exception as e:
@@ -557,7 +580,7 @@ async def handle_checklist_callback(callback: CallbackQuery):
                 "Clique no equipamento desejado para acessar suas opções.\n\n"
                 "💡 **Dica:** Você também pode escanear o QR Code físico do equipamento!",
                 reply_markup=markup,
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
         elif data.startswith("link_eq_"):
@@ -581,7 +604,7 @@ async def handle_checklist_callback(callback: CallbackQuery):
             await callback.message.answer(
                 f"🚧 **Checklist - {data}**\n\n"
                 "Funcionalidade em desenvolvimento...",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
     except Exception as e:
@@ -630,7 +653,7 @@ async def processar_novo_checklist_nr12(callback: CallbackQuery, state: FSMConte
                         f"📅 Data: {hoje}\n"
                         f"🚜 Equipamento ID: {equipamento_id}\n\n"
                         "Volte amanhã para novos checklists.",
-                        parse_mode='Markdown'
+                        parse_mode='HTML'
                     )
                     return
                 
@@ -660,7 +683,7 @@ async def processar_novo_checklist_nr12(callback: CallbackQuery, state: FSMConte
                     f"📅 Data: {hoje}{texto_turnos_realizados}\n\n"
                     f"🕐 **Selecione o turno:**",
                     reply_markup=markup,
-                    parse_mode='Markdown'
+                    parse_mode='HTML'
                 )
                 
     except Exception as e:
@@ -713,7 +736,7 @@ async def criar_checklist_nr12(callback: CallbackQuery, state: FSMContext, equip
             f"👤 Operador: {operador.get('nome')}\n\n"
             f"Deseja criar este checklist?",
             reply_markup=markup,
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.set_state(EquipmentStates.waiting_for_checklist_confirm)
@@ -748,7 +771,7 @@ async def processar_abastecimento(callback: CallbackQuery, state: FSMContext, eq
             f"👤 Operador: {operador.get('nome')}\n\n"
             f"Digite a quantidade de combustível em litros:",
             reply_markup=keyboard,
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.set_state(EquipmentStates.waiting_for_fuel_quantity)
@@ -784,7 +807,7 @@ async def processar_ordem_servico(callback: CallbackQuery, state: FSMContext, eq
             f"👤 Solicitante: {operador.get('nome')}\n\n"
             f"Selecione o tipo de OS:",
             reply_markup=markup,
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
     except Exception as e:
@@ -825,7 +848,7 @@ async def processar_horimetro(callback: CallbackQuery, state: FSMContext, equipa
                     f"📊 Horímetro atual: {horimetro_atual:,.0f}h\n\n"
                     f"Digite o novo valor do horímetro:",
                     reply_markup=keyboard,
-                    parse_mode='Markdown'
+                    parse_mode='HTML'
                 )
                 
                 await state.set_state(EquipmentStates.waiting_for_horimeter)
@@ -884,7 +907,7 @@ async def mostrar_historico_equipamento(callback: CallbackQuery, equipamento_id:
                 await callback.message.answer(
                     texto,
                     reply_markup=markup,
-                    parse_mode='Markdown'
+                    parse_mode='HTML'
                 )
             else:
                 await callback.message.answer("❌ Erro ao buscar histórico")
@@ -914,7 +937,7 @@ async def process_fuel_quantity(message: Message, state: FSMContext):
         
         await message.answer(
             f"💰 Digite o valor total do abastecimento (R$):",
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.set_state(EquipmentStates.waiting_for_fuel_value)
@@ -959,7 +982,7 @@ async def process_fuel_value(message: Message, state: FSMContext):
             f"📅 Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n"
             f"✅ Dados salvos com sucesso!",
             reply_markup=ReplyKeyboardRemove(),
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.clear()
@@ -1001,7 +1024,7 @@ async def process_horimeter_value(message: Message, state: FSMContext):
             f"📅 Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n"
             f"✅ Dados salvos com sucesso!",
             reply_markup=ReplyKeyboardRemove(),
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.clear()
@@ -1096,7 +1119,7 @@ async def handle_os_type_callback(callback: CallbackQuery, state: FSMContext):
             f"📝 **Nova OS - {tipo_texto}**\n\n"
             f"Descreva o problema ou serviço necessário:",
             reply_markup=keyboard,
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.set_state(EquipmentStates.waiting_for_os_description)
@@ -1145,7 +1168,7 @@ async def process_os_description(message: Message, state: FSMContext):
             f"📅 Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n"
             f"✅ OS registrada com sucesso!",
             reply_markup=ReplyKeyboardRemove(),
-            parse_mode='Markdown'
+            parse_mode='HTML'
         )
         
         await state.clear()
@@ -1229,14 +1252,14 @@ async def handle_checklist_confirm_callback(callback: CallbackQuery, state: FSMC
                             f"👤 Operador: {operador.get('nome')}\n\n"
                             f"O que deseja fazer agora?",
                             reply_markup=markup,
-                            parse_mode='Markdown'
+                            parse_mode='HTML'
                         )
                     else:
                         error_msg = response.json().get('error', 'Erro desconhecido')
                         await callback.message.answer(
                             f"❌ **Erro ao criar checklist**\n\n"
                             f"Mensagem: {error_msg}",
-                            parse_mode='Markdown'
+                            parse_mode='HTML'
                         )
                         
             except Exception as e:
@@ -1275,7 +1298,7 @@ async def handle_checklist_action_callback(callback: CallbackQuery):
                 f"• Adicionar fotos\n"
                 f"• Registrar observações\n"
                 f"• Assinar digitalmente",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
         elif data.startswith("detalhes_checklist_"):
@@ -1308,7 +1331,7 @@ async def handle_checklist_action_callback(callback: CallbackQuery):
                             f"📝 Total de itens: {checklist.get('total_itens', 0)}\n"
                             f"✅ Itens conformes: {checklist.get('itens_conformes', 0)}\n"
                             f"❌ Não conformidades: {checklist.get('nao_conformidades', 0)}",
-                            parse_mode='Markdown'
+                            parse_mode='HTML'
                         )
                     else:
                         await callback.message.answer("❌ Erro ao buscar detalhes do checklist")
