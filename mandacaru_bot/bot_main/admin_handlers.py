@@ -159,7 +159,7 @@ async def cleanup_handler(message: Message, operador=None):
     await log_user_action(message, "SESSIONS_CLEANUP_EXECUTED")
     
     try:
-        sessoes_removidas = limpar_sessoes_expiradas(24)
+        sessoes_removidas = await limpar_sessoes_expiradas(24)
         
         if sessoes_removidas > 0:
             await message.answer(f"🧹 Limpeza concluída! {sessoes_removidas} sessões antigas foram removidas.")

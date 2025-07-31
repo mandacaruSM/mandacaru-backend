@@ -15,7 +15,7 @@ def require_auth(func):
         chat_id = str(message.chat.id)
         
         # Verificar se está autenticado
-        if not esta_autenticado(chat_id):
+        if not await esta_autenticado(chat_id):
             await message.answer(
                 "🔒 Você precisa estar autenticado para usar este comando.\n\n"
                 "Digite /start para fazer login."
@@ -23,7 +23,7 @@ def require_auth(func):
             return
         
         # Adiciona o operador aos kwargs para facilitar o acesso
-        operador = obter_operador(chat_id)
+        operador = await obter_operador(chat_id)
         if not operador:
             await message.answer(
                 "❌ Erro de sessão. Digite /start para fazer login novamente."
@@ -44,11 +44,11 @@ def admin_required(func):
     async def wrapper(message: Message, *args, **kwargs):
         chat_id = str(message.chat.id)
         
-        if not esta_autenticado(chat_id):
+        if not await esta_autenticado(chat_id):
             await message.answer("🔒 Autenticação necessária.")
             return
         
-        operador = obter_operador(chat_id)
+        operador = await obter_operador(chat_id)
         if not operador or not operador.get('is_admin', False):
             await message.answer("❌ Acesso negado. Privilégios de administrador necessários.")
             return
@@ -63,7 +63,7 @@ async def log_user_action(message: Message, action: str, details: str = ""):
     Registra ações do usuário para auditoria
     """
     chat_id = str(message.chat.id)
-    operador = obter_operador(chat_id)
+    operador = await obter_operador(chat_id)
     
     log_entry = {
         "chat_id": chat_id,

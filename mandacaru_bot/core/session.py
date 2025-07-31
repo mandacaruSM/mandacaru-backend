@@ -226,7 +226,7 @@ async def remover_sessao(user_id: int):
     return await limpar_sessao(user_id)
 
 # Função síncrona para compatibilidade com admin_handlers
-def limpar_sessoes_expiradas(timeout_hours: int = 24) -> int:
+async def limpar_sessoes_expiradas(timeout_hours: int = 24) -> int:
     """Remove sessões expiradas - VERSÃO SÍNCRONA"""
     agora = datetime.now()
     timeout_delta = timedelta(hours=timeout_hours)

@@ -35,7 +35,7 @@ async def equipamento_menu_handler(message: Message, operador=None):
     )
     
     # Atualiza estado da sessão
-    atualizar_sessao(str(message.chat.id), "estado", SessionState.EQUIPAMENTO_ATIVO)
+    await atualizar_sessao(str(message.chat.id), {"estado": SessionState.EQUIPAMENTO_ATIVO})
 
 @require_auth
 async def buscar_equipamento_handler(message: Message, operador=None):
