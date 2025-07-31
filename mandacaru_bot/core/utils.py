@@ -1,286 +1,305 @@
-# =====================
-# core/utils.py
-# =====================
+# ===============================================
+# ARQUIVO: mandacaru_bot/core/utils.py
+# Utilitários e validadores
+# SALVAR COMO: mandacaru_bot/core/utils.py
+# ===============================================
 
 import re
-from datetime import datetime, date
-from typing import Optional, Dict, Any, List
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-from aiogram import F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import StateFilter
-from core.session import SessionState
-from core.db import (
-    buscar_operador_por_nome, 
-    buscar_operador_por_chat_id,
-    buscar_equipamento_por_uuid,
-    atualizar_chat_id_operador
-)
 import logging
-import re
+from datetime import datetime, date
+from typing import Optional, Any, Dict, List
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logger = logging.getLogger(__name__)
 
 class Validators:
-    """Classe com métodos de validação"""
+    """Classe com validadores de dados"""
     
     @staticmethod
-    def validar_data(data_str: str, formato: str = "%d/%m/%Y") -> Optional[date]:
+    def validar_nome(nome: str) -> bool:
         """
-        Valida uma string de data e retorna um objeto date
+        Valida nome do operador
+        
+        Args:
+            nome: Nome a ser validado
+            
+        Returns:
+            True se válido
+        """
+        if not nome or not isinstance(nome, str):
+            return False
+        
+        nome = nome.strip()
+        return len(nome) >= 3 and not any(char.isdigit() for char in nome)
+    
+    @staticmethod
+    def validar_data_nascimento(data_texto: str) -> Optional[date]:
+        """
+        Valida e converte data de nascimento
+        
+        Args:
+            data_texto: Data em texto (DD/MM/AAAA)
+            
+        Returns:
+            Objeto date se válido, None se inválido
         """
         try:
-            return datetime.strptime(data_str, formato).date()
+            # Tentar formato DD/MM/AAAA
+            data = datetime.strptime(data_texto.strip(), '%d/%m/%Y').date()
+            
+            # Validar se não é futura
+            if data > date.today():
+                return None
+            
+            # Validar idade razoável (entre 16 e 100 anos)
+            idade = (date.today() - data).days // 365
+            if idade < 16 or idade > 100:
+                return None
+            
+            return data
+            
         except ValueError:
             return None
     
     @staticmethod
-    def validar_email(email: str) -> bool:
-        """Valida formato de email"""
-        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        return re.match(pattern, email) is not None
-    
-    @staticmethod
-    def validar_telefone(telefone: str) -> bool:
-        """Valida formato de telefone brasileiro"""
-        # Remove caracteres não numéricos
-        numeros = re.sub(r'\D', '', telefone)
-        # Verifica se tem 10 ou 11 dígitos
-        return len(numeros) in [10, 11] and numeros.startswith(('1', '2', '3', '4', '5', '6', '7', '8', '9'))
-    
-    @staticmethod
-    def validar_cpf(cpf: str) -> bool:
-        """Valida CPF brasileiro"""
-        # Remove caracteres não numéricos
-        cpf = re.sub(r'\D', '', cpf)
+    def validar_valor_monetario(valor_texto: str) -> Optional[float]:
+        """
+        Valida valor monetário
         
-        # Verifica se tem 11 dígitos
-        if len(cpf) != 11:
-            return False
-        
-        # Verifica se não é uma sequência de números iguais
-        if cpf == cpf[0] * 11:
-            return False
-        
-        # Validação dos dígitos verificadores
-        def calcular_digito(cpf_parcial):
-            soma = sum(int(cpf_parcial[i]) * (len(cpf_parcial) + 1 - i) for i in range(len(cpf_parcial)))
-            resto = soma % 11
-            return 0 if resto < 2 else 11 - resto
-        
-        # Verifica primeiro dígito
-        if int(cpf[9]) != calcular_digito(cpf[:9]):
-            return False
-        
-        # Verifica segundo dígito
-        if int(cpf[10]) != calcular_digito(cpf[:10]):
-            return False
-        
-        return True
-    
-    @staticmethod
-    def validar_numero_positivo(valor_str: str) -> Optional[float]:
-        """Valida e converte string para número positivo"""
+        Args:
+            valor_texto: Valor em texto
+            
+        Returns:
+            Float se válido, None se inválido
+        """
         try:
-            valor = float(valor_str.replace(',', '.'))
+            valor = float(valor_texto.replace(',', '.'))
             return valor if valor > 0 else None
         except ValueError:
             return None
+    
+    @staticmethod
+    def validar_quantidade(quantidade_texto: str) -> Optional[float]:
+        """
+        Valida quantidade (litros, etc)
+        
+        Args:
+            quantidade_texto: Quantidade em texto
+            
+        Returns:
+            Float se válido, None se inválido
+        """
+        try:
+            quantidade = float(quantidade_texto.replace(',', '.'))
+            return quantidade if quantidade > 0 else None
+        except ValueError:
+            return None
+    
+    @staticmethod
+    def validar_horimetro(horimetro_texto: str) -> Optional[float]:
+        """
+        Valida horímetro
+        
+        Args:
+            horimetro_texto: Horímetro em texto
+            
+        Returns:
+            Float se válido, None se inválido
+        """
+        try:
+            horimetro = float(horimetro_texto.replace(',', '.'))
+            # Horímetro deve ser positivo e razoável (máximo 100.000h)
+            return horimetro if 0 <= horimetro <= 100000 else None
+        except ValueError:
+            return None
+    
+    @staticmethod
+    def validar_uuid(uuid_texto: str) -> bool:
+        """
+        Valida formato UUID
+        
+        Args:
+            uuid_texto: UUID em texto
+            
+        Returns:
+            True se válido
+        """
+        pattern = r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'
+        return bool(re.match(pattern, uuid_texto.lower()))
 
-class KeyboardBuilder:
-    """Classe para construir teclados do Telegram"""
+class Formatters:
+    """Classe com formatadores de dados"""
     
     @staticmethod
-    def menu_principal() -> ReplyKeyboardMarkup:
-        """Constrói o teclado do menu principal"""
-        return ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="📋 Checklist"), KeyboardButton(text="⛽ Abastecimento")],
-                [KeyboardButton(text="🔧 Ordem de Serviço"), KeyboardButton(text="💰 Financeiro")],
-                [KeyboardButton(text="📱 QR Code"), KeyboardButton(text="❓ Ajuda")]
-            ],
-            resize_keyboard=True,
-            one_time_keyboard=False
-        )
-    
-    @staticmethod
-    def confirmar_cancelar() -> InlineKeyboardMarkup:
-        """Teclado simples de confirmação"""
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="✅ Confirmar", callback_data="confirmar"),
-                    InlineKeyboardButton(text="❌ Cancelar", callback_data="cancelar")
-                ]
-            ]
-        )
-    
-    @staticmethod
-    def sim_nao() -> InlineKeyboardMarkup:
-        """Teclado Sim/Não"""
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="✅ Sim", callback_data="sim"),
-                    InlineKeyboardButton(text="❌ Não", callback_data="nao")
-                ]
-            ]
-        )
-    
-    @staticmethod
-    def paginacao(pagina_atual: int, total_paginas: int, callback_prefix: str) -> InlineKeyboardMarkup:
-        """Constrói teclado de paginação"""
-        botoes = []
+    def formatar_moeda(valor: float) -> str:
+        """
+        Formata valor monetário
         
-        if pagina_atual > 1:
-            botoes.append(InlineKeyboardButton(text="⬅️ Anterior", callback_data=f"{callback_prefix}_{pagina_atual-1}"))
-        
-        botoes.append(InlineKeyboardButton(text=f"{pagina_atual}/{total_paginas}", callback_data="pagina_info"))
-        
-        if pagina_atual < total_paginas:
-            botoes.append(InlineKeyboardButton(text="Próxima ➡️", callback_data=f"{callback_prefix}_{pagina_atual+1}"))
-        
-        return InlineKeyboardMarkup(inline_keyboard=[botoes])
-
-class MessageFormatter:
-    """Classe para formatação de mensagens"""
-    
-    @staticmethod
-    def formato_data_br(data_obj: date) -> str:
-        """Formata data para padrão brasileiro"""
-        return data_obj.strftime("%d/%m/%Y")
-    
-    @staticmethod
-    def formato_datetime_br(datetime_obj: datetime) -> str:
-        """Formata datetime para padrão brasileiro"""
-        return datetime_obj.strftime("%d/%m/%Y às %H:%M")
-    
-    @staticmethod
-    def formato_moeda_br(valor: float) -> str:
-        """Formata valor monetário para padrão brasileiro"""
+        Args:
+            valor: Valor numérico
+            
+        Returns:
+            Valor formatado (R$ 1.234,56)
+        """
         return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     
     @staticmethod
-    def truncar_texto(texto: str, limite: int = 100) -> str:
-        """Trunca texto se exceder o limite"""
-        return texto if len(texto) <= limite else texto[:limite-3] + "..."
+    def formatar_data(data: date) -> str:
+        """
+        Formata data para exibição
+        
+        Args:
+            data: Objeto date
+            
+        Returns:
+            Data formatada (DD/MM/AAAA)
+        """
+        return data.strftime('%d/%m/%Y')
     
     @staticmethod
-    def status_emoji(status: str) -> str:
-        """Retorna emoji baseado no status"""
-        emojis = {
-            "pendente": "⏳",
-            "em_andamento": "🔄", 
-            "concluido": "✅",
-            "cancelado": "❌",
-            "aprovado": "✅",
-            "rejeitado": "❌",
-            "ativo": "🟢",
-            "inativo": "🔴"
+    def formatar_datetime(dt: datetime) -> str:
+        """
+        Formata datetime para exibição
+        
+        Args:
+            dt: Objeto datetime
+            
+        Returns:
+            Datetime formatado (DD/MM/AAAA HH:MM)
+        """
+        return dt.strftime('%d/%m/%Y %H:%M')
+    
+    @staticmethod
+    def formatar_horimetro(horas: float) -> str:
+        """
+        Formata horímetro
+        
+        Args:
+            horas: Horas numéricas
+            
+        Returns:
+            Horímetro formatado (1.234,5h)
+        """
+        return f"{horas:,.1f}h".replace(',', 'X').replace('.', ',').replace('X', '.')
+    
+    @staticmethod
+    def formatar_status(status: str) -> str:
+        """
+        Formata status para exibição
+        
+        Args:
+            status: Status em texto
+            
+        Returns:
+            Status formatado com emoji
+        """
+        status_map = {
+            'DISPONIVEL': '✅ Disponível',
+            'EM_USO': '🔄 Em Uso',
+            'MANUTENCAO': '🔧 Manutenção',
+            'INATIVO': '❌ Inativo',
+            'PENDENTE': '⏳ Pendente',
+            'CONCLUIDO': '✅ Concluído',
+            'CANCELADO': '❌ Cancelado',
+            'ABERTA': '🔓 Aberta',
+            'FECHADA': '🔒 Fechada'
         }
-        return emojis.get(status.lower(), "⚪")
+        return status_map.get(status.upper(), status)
 
-class DataProcessor:
-    """Classe para processamento de dados"""
+class KeyboardBuilder:
+    """Classe para construir teclados inline"""
     
     @staticmethod
-    def paginar_lista(lista: List[Any], pagina: int, itens_por_pagina: int = 10) -> Dict[str, Any]:
-        """Pagina uma lista de itens"""
-        total_itens = len(lista)
-        total_paginas = (total_itens + itens_por_pagina - 1) // itens_por_pagina
-        
-        inicio = (pagina - 1) * itens_por_pagina
-        fim = inicio + itens_por_pagina
-        
-        return {
-            "itens": lista[inicio:fim],
-            "pagina_atual": pagina,
-            "total_paginas": total_paginas,
-            "total_itens": total_itens,
-            "tem_proxima": pagina < total_paginas,
-            "tem_anterior": pagina > 1
-        }
+    def confirmar_cancelar() -> InlineKeyboardMarkup:
+        """Cria teclado de confirmação"""
+        keyboard = [
+            [
+                InlineKeyboardButton(text="✅ Confirmar", callback_data="confirmar"),
+                InlineKeyboardButton(text="❌ Cancelar", callback_data="cancelar")
+            ]
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=keyboard)
     
     @staticmethod
-    def filtrar_por_data(lista: List[Dict], campo_data: str, data_inicio: date, data_fim: Optional[date] = None) -> List[Dict]:
-        """Filtra lista por intervalo de datas"""
-        if data_fim is None:
-            data_fim = data_inicio
+    def sim_nao() -> InlineKeyboardMarkup:
+        """Cria teclado sim/não"""
+        keyboard = [
+            [
+                InlineKeyboardButton(text="✅ Sim", callback_data="sim"),
+                InlineKeyboardButton(text="❌ Não", callback_data="nao")
+            ]
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    
+    @staticmethod
+    def voltar_menu() -> InlineKeyboardMarkup:
+        """Cria botão para voltar ao menu"""
+        keyboard = [
+            [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_principal")]
+        ]
+        return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+class MessageUtils:
+    """Utilitários para mensagens"""
+    
+    @staticmethod
+    def truncar_texto(texto: str, max_length: int = 4000) -> str:
+        """
+        Trunca texto para não exceder limite do Telegram
         
+        Args:
+            texto: Texto a truncar
+            max_length: Comprimento máximo
+            
+        Returns:
+            Texto truncado
+        """
+        if len(texto) <= max_length:
+            return texto
+        
+        return texto[:max_length - 3] + "..."
+    
+    @staticmethod
+    def escapar_markdown(texto: str) -> str:
+        """
+        Escapa caracteres especiais do Markdown
+        
+        Args:
+            texto: Texto a escapar
+            
+        Returns:
+            Texto escapado
+        """
+        caracteres_especiais = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in caracteres_especiais:
+            texto = texto.replace(char, f'\\{char}')
+        return texto
+    
+    @staticmethod
+    def criar_lista_numerada(itens: List[str], max_itens: int = 10) -> str:
+        """
+        Cria lista numerada
+        
+        Args:
+            itens: Lista de itens
+            max_itens: Máximo de itens a mostrar
+            
+        Returns:
+            Lista formatada
+        """
         resultado = []
-        for item in lista:
-            try:
-                data_item = datetime.fromisoformat(item[campo_data]).date()
-                if data_inicio <= data_item <= data_fim:
-                    resultado.append(item)
-            except (KeyError, ValueError):
-                continue
+        for i, item in enumerate(itens[:max_itens], 1):
+            resultado.append(f"{i}. {item}")
         
-        return resultado
-    
-    @staticmethod
-    def agrupar_por_campo(lista: List[Dict], campo: str) -> Dict[str, List[Dict]]:
-        """Agrupa lista por valor de um campo"""
-        grupos = {}
-        for item in lista:
-            chave = item.get(campo, "Sem categoria")
-            if chave not in grupos:
-                grupos[chave] = []
-            grupos[chave].append(item)
-        return grupos
+        if len(itens) > max_itens:
+            resultado.append(f"... e mais {len(itens) - max_itens} itens")
+        
+        return "\n".join(resultado)
 
-class ErrorMessages:
-    """Mensagens de erro padronizadas"""
-    
-    ERRO_GENERICO = "❌ Ocorreu um erro inesperado. Tente novamente."
-    ERRO_CONEXAO = "❌ Erro de conexão. Verifique sua internet e tente novamente."
-    ERRO_AUTENTICACAO = "🔒 Você precisa estar autenticado. Digite /start para fazer login."
-    ERRO_PERMISSAO = "❌ Você não tem permissão para realizar esta ação."
-    ERRO_DADOS_INVALIDOS = "❌ Dados inválidos. Verifique as informações e tente novamente."
-    ERRO_NAO_ENCONTRADO = "❌ Item não encontrado."
-    ERRO_TIMEOUT = "⏱️ Operação expirou. Tente novamente."
-    
-    @staticmethod
-    def erro_validacao(campo: str) -> str:
-        return f"❌ {campo} inválido. Verifique o formato e tente novamente."
-
-class SuccessMessages:
-    """Mensagens de sucesso padronizadas"""
-    
-    OPERACAO_SUCESSO = "✅ Operação realizada com sucesso!"
-    DADOS_SALVOS = "✅ Dados salvos com sucesso!"
-    DADOS_ATUALIZADOS = "✅ Dados atualizados com sucesso!"
-    DADOS_REMOVIDOS = "✅ Dados removidos com sucesso!"
-    
-    @staticmethod
-    def criado_sucesso(item: str) -> str:
-        return f"✅ {item} criado com sucesso!"
-    
-    @staticmethod
-    def atualizado_sucesso(item: str) -> str:
-        return f"✅ {item} atualizado com sucesso!"
-    
-from datetime import datetime
-
-def validar_data_nascimento(data_str: str):
-    """Valida formato de data DD/MM/AAAA"""
-    try:
-        return datetime.strptime(data_str, '%d/%m/%Y').date()
-    except ValueError:
-        return None
-
-def register_handlers(dp):
-    """Registra todos os handlers principais"""
-    
-    # Handler específico para QR codes (DEVE VIR PRIMEIRO!)
-    dp.message.register(handle_qr_code_start, F.text.startswith('/start eq_'))
-    
-    # Handler padrão para /start (DEVE VIR DEPOIS)
-    dp.message.register(start_command, F.text == '/start')
-    
-    # Handlers de autenticação
-    dp.message.register(handle_nome, StateFilter(SessionState.AGUARDANDO_NOME))
-    dp.message.register(handle_data_nascimento, StateFilter(SessionState.AGUARDANDO_DATA_NASCIMENTO))
-    
-    # Outros handlers (se existirem)
-    # dp.message.register(outros_handlers...)
+# Exportar classes principais
+__all__ = [
+    'Validators',
+    'Formatters', 
+    'KeyboardBuilder',
+    'MessageUtils'
+]

@@ -1,261 +1,178 @@
-# =====================
-# core/templates.py
-# =====================
+# ===============================================
+# ARQUIVO: mandacaru_bot/core/templates.py
+# Templates de mensagens padronizadas
+# SALVAR COMO: mandacaru_bot/core/templates.py
+# ===============================================
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
-from core.utils import MessageFormatter
+from .utils import Formatters
 
 class MessageTemplates:
     """Templates de mensagens padronizadas"""
     
     @staticmethod
-    def welcome_message(nome: str) -> str:
-        """Mensagem de boas-vindas após login"""
-        return f"""
-🎉 **Bem-vindo ao Sistema Mandacaru!**
+    def welcome_template() -> str:
+        """Template de boas-vindas"""
+        return """🤖 **Bem-vindo ao Bot Mandacaru!**
 
-Olá, **{nome}**! 👋
+🏢 Sistema de gestão empresarial integrado
 
-Seu acesso foi liberado com sucesso. Use o menu abaixo para navegar pelos módulos disponíveis:
+🎯 **Funcionalidades disponíveis:**
+• 📋 Checklist NR12
+• ⛽ Controle de abastecimento  
+• 🔧 Ordens de serviço
+• 📱 Acesso via QR Code
+• 💰 Relatórios financeiros
 
-📋 **Checklist** - Verificações e inspeções
-⛽ **Abastecimento** - Controle de combustível  
-🔧 **Ordem de Serviço** - Solicitações de manutenção
-💰 **Financeiro** - Consultas e relatórios
-📱 **QR Code** - Geração de códigos
-❓ **Ajuda** - Suporte e informações
-
-💡 *Dica: Use o menu sempre que precisar navegar entre os módulos.*
-        """.strip()
+🔐 **Para começar, vamos fazer seu login...**"""
     
     @staticmethod
-    def error_template(titulo: str, descricao: str, codigo_erro: Optional[str] = None) -> str:
-        """Template para mensagens de erro"""
-        message = f"❌ **{titulo}**\n\n{descricao}"
-        if codigo_erro:
-            message += f"\n\n🔍 *Código: {codigo_erro}*"
-        return message
-    
-    @staticmethod
-    def success_template(titulo: str, descricao: str, dados_extras: Optional[Dict] = None) -> str:
-        """Template para mensagens de sucesso"""
-        message = f"✅ **{titulo}**\n\n{descricao}"
-        
-        if dados_extras:
-            message += "\n\n📊 **Detalhes:**"
-            for chave, valor in dados_extras.items():
-                message += f"\n• {chave}: {valor}"
-        
-        return message
-    
-    @staticmethod
-    def info_template(titulo: str, items: Dict[str, Any]) -> str:
-        """Template para exibição de informações"""
-        message = f"ℹ️ **{titulo}**\n"
-        
-        for chave, valor in items.items():
-            message += f"\n📌 **{chave}:** {valor}"
-        
-        return message
-    
-    @staticmethod
-    def checklist_summary(checklist: Dict[str, Any]) -> str:
-        """Template para resumo de checklist"""
-        data_criacao = checklist.get('data_criacao', 'N/A')
-        if data_criacao != 'N/A':
-            try:
-                data_formatada = MessageFormatter.formato_datetime_br(
-                    datetime.fromisoformat(data_criacao)
-                )
-            except:
-                data_formatada = data_criacao
-        else:
-            data_formatada = 'N/A'
-        
-        return f"""
-📋 **Checklist #{checklist.get('id', 'N/A')}**
+    def login_success_template(operador: Dict[str, Any]) -> str:
+        """Template de login bem-sucedido"""
+        return f"""✅ **Login realizado com sucesso!**
 
-🏷️ **Tipo:** {checklist.get('tipo', 'N/A').title()}
-📝 **Descrição:** {checklist.get('descricao', 'N/A')}
-📊 **Status:** {MessageFormatter.status_emoji(checklist.get('status', ''))} {checklist.get('status', 'N/A').title()}
-📅 **Criado em:** {data_formatada}
-👤 **Operador:** {checklist.get('operador_nome', 'N/A')}
-        """.strip()
+👤 **Operador:** {operador.get('nome', 'N/A')}
+💼 **Função:** {operador.get('funcao', 'N/A')}
+📅 **Data:** {datetime.now().strftime('%d/%m/%Y')}
+🕐 **Horário:** {datetime.now().strftime('%H:%M')}
+
+🎯 **Escolha uma opção no menu abaixo:**"""
     
     @staticmethod
-    def os_summary(ordem_servico: Dict[str, Any]) -> str:
-        """Template para resumo de ordem de serviço"""
-        prioridade_emoji = {
-            'baixa': '🟢',
-            'media': '🟡', 
-            'alta': '🟠',
-            'critica': '🔴'
+    def error_template(titulo: str, descricao: str) -> str:
+        """Template de erro"""
+        return f"""❌ **{titulo}**
+
+{descricao}
+
+🔄 Tente novamente ou entre em contato com o suporte se o problema persistir."""
+    
+    @staticmethod
+    def success_template(titulo: str, descricao: str) -> str:
+        """Template de sucesso"""
+        return f"""✅ **{titulo}**
+
+{descricao}
+
+📅 **Registrado em:** {datetime.now().strftime('%d/%m/%Y às %H:%M')}"""
+    
+    @staticmethod
+    def equipamento_info_template(equipamento: Dict[str, Any]) -> str:
+        """Template de informações do equipamento"""
+        nome = equipamento.get('nome', 'N/A')
+        status = Formatters.formatar_status(equipamento.get('status_operacional', 'N/A'))
+        horimetro = Formatters.formatar_horimetro(equipamento.get('horimetro_atual', 0))
+        modelo = equipamento.get('modelo', 'N/A')
+        
+        return f"""🚜 **{nome}**
+
+📊 **Status:** {status}
+⏱️ **Horímetro:** {horimetro}
+🏷️ **Modelo:** {modelo}
+🆔 **ID:** {equipamento.get('id', 'N/A')}"""
+    
+    @staticmethod
+    def abastecimento_template(abastecimento: Dict[str, Any]) -> str:
+        """Template de abastecimento"""
+        quantidade = abastecimento.get('quantidade_litros', 0)
+        valor = abastecimento.get('valor_total', 0)
+        preco_litro = valor / quantidade if quantidade > 0 else 0
+        
+        return f"""⛽ **Abastecimento Registrado**
+
+📊 **Quantidade:** {quantidade:.1f} litros
+💰 **Valor Total:** {Formatters.formatar_moeda(valor)}
+💲 **Preço/Litro:** {Formatters.formatar_moeda(preco_litro)}
+🚜 **Equipamento:** {abastecimento.get('equipamento_nome', 'N/A')}
+👤 **Operador:** {abastecimento.get('operador_nome', 'N/A')}"""
+    
+    @staticmethod
+    def ordem_servico_template(os: Dict[str, Any]) -> str:
+        """Template de ordem de serviço"""
+        return f"""🔧 **Ordem de Serviço #{os.get('id', 'N/A')}**
+
+📊 **Status:** {Formatters.formatar_status(os.get('status', 'ABERTA'))}
+🔧 **Tipo:** {os.get('tipo_problema', 'N/A')}
+📝 **Descrição:** {os.get('descricao', 'N/A')}
+🚜 **Equipamento:** {os.get('equipamento_nome', 'N/A')}
+👤 **Solicitante:** {os.get('operador_nome', 'N/A')}"""
+    
+    @staticmethod
+    def lista_vazia_template(tipo: str) -> str:
+        """Template para listas vazias"""
+        emoji_map = {
+            'checklists': '📋',
+            'equipamentos': '🚜',
+            'abastecimentos': '⛽',
+            'ordens_servico': '🔧'
         }
         
-        return f"""
-🔧 **OS #{ordem_servico.get('id', 'N/A')}**
-
-📋 **Título:** {ordem_servico.get('titulo', 'N/A')}
-📝 **Descrição:** {MessageFormatter.truncar_texto(ordem_servico.get('descricao', 'N/A'), 100)}
-{prioridade_emoji.get(ordem_servico.get('prioridade', '').lower(), '⚪')} **Prioridade:** {ordem_servico.get('prioridade', 'N/A').title()}
-📊 **Status:** {MessageFormatter.status_emoji(ordem_servico.get('status', ''))} {ordem_servico.get('status', 'N/A').title()}
-👤 **Solicitante:** {ordem_servico.get('solicitante_nome', 'N/A')}
-        """.strip()
-    
-    @staticmethod
-    def abastecimento_summary(abastecimento: Dict[str, Any]) -> str:
-        """Template para resumo de abastecimento"""
-        valor = abastecimento.get('valor_total', 0)
-        valor_formatado = MessageFormatter.formato_moeda_br(float(valor)) if valor else 'N/A'
+        emoji = emoji_map.get(tipo, '📄')
         
-        return f"""
-⛽ **Abastecimento #{abastecimento.get('id', 'N/A')}**
+        return f"""{emoji} **Nenhum item encontrado**
 
-🚗 **Veículo:** {abastecimento.get('veiculo', 'N/A')}
-⛽ **Combustível:** {abastecimento.get('tipo_combustivel', 'N/A')}
-📊 **Litros:** {abastecimento.get('litros', 'N/A')}L
-💰 **Valor:** {valor_formatado}
-📅 **Data:** {abastecimento.get('data_abastecimento', 'N/A')}
-📍 **Posto:** {abastecimento.get('posto', 'N/A')}
-        """.strip()
+Não há {tipo} disponíveis no momento.
+
+🔄 Tente novamente mais tarde ou verifique os filtros aplicados."""
     
     @staticmethod
-    def help_menu() -> str:
-        """Menu de ajuda completo"""
-        return """
-❓ **Central de Ajuda - Bot Mandacaru**
+    def ajuda_template() -> str:
+        """Template de ajuda"""
+        return """❓ **Central de Ajuda**
 
-🔧 **Como usar o bot:**
-1️⃣ Faça login com /start
-2️⃣ Use o menu para navegar
-3️⃣ Siga as instruções em tela
+🤖 **Como usar o bot:**
+1. Faça login com /start
+2. Use os botões do menu
+3. Escaneie QR codes dos equipamentos
 
-📋 **Módulos disponíveis:**
+📱 **Comandos disponíveis:**
+• /start - Fazer login
+• /admin - Painel administrativo (apenas admins)
 
-**📋 Checklist**
-• Criar novos checklists
-• Visualizar histórico
-• Gerar relatórios
+🎯 **Principais funcionalidades:**
+• 📋 Checklist NR12 obrigatório
+• ⛽ Registro de abastecimentos
+• 🔧 Abertura de ordens de serviço
+• 📊 Consulta de relatórios
 
-**⛽ Abastecimento**  
-• Registrar abastecimentos
-• Controlar consumo
-• Acompanhar custos
-
-**🔧 Ordem de Serviço**
-• Criar solicitações
-• Acompanhar status
-• Histórico de manutenções
-
-**💰 Financeiro**
-• Consultar relatórios
-• Acompanhar gastos
-• Análises financeiras
-
-**📱 QR Code**
-• Gerar códigos
-• Acessar informações
+📱 **QR Codes:**
+Cada equipamento possui um QR code único. Ao escaneá-lo, você acessa diretamente as funções específicas daquele equipamento.
 
 🆘 **Precisa de ajuda?**
-Entre em contato com a equipe técnica ou use os comandos:
-• /start - Fazer login
-• /help - Esta ajuda
-• /status - Status do sistema
-        """.strip()
+Entre em contato com o suporte técnico:
+📞 (11) 99999-9999
+📧 suporte@mandacaru.com"""
+
+class AdminTemplates:
+    """Templates específicos para administradores"""
     
     @staticmethod
-    def pagination_info(pagina_atual: int, total_paginas: int, total_itens: int) -> str:
-        """Informações de paginação"""
-        return f"📄 Página {pagina_atual} de {total_paginas} • Total: {total_itens} itens"
+    def painel_admin_template(stats: Dict[str, Any]) -> str:
+        """Template do painel administrativo"""
+        return f"""🔑 **Painel Administrativo**
+
+📊 **Estatísticas do Sistema:**
+👥 Usuários ativos: {stats.get('usuarios_ativos', 0)}
+📋 Checklists hoje: {stats.get('checklists_hoje', 0)}
+⛽ Abastecimentos hoje: {stats.get('abastecimentos_hoje', 0)}
+🔧 OS abertas: {stats.get('os_abertas', 0)}
+
+🕐 **Última atualização:** {datetime.now().strftime('%H:%M')}"""
     
     @staticmethod
-    def loading_message(acao: str) -> str:
-        """Mensagem de carregamento"""
-        return f"⏳ {acao}... Aguarde um momento."
-    
-    @staticmethod
-    def confirmation_required(acao: str, detalhes: Optional[str] = None) -> str:
-        """Template para confirmação de ação"""
-        message = f"⚠️ **Confirmação necessária**\n\nVocê tem certeza que deseja {acao}?"
-        if detalhes:
-            message += f"\n\n📝 **Detalhes:** {detalhes}"
-        message += "\n\n⚡ *Esta ação não pode ser desfeita.*"
-        return message
+    def broadcast_template() -> str:
+        """Template para broadcast"""
+        return """📢 **Enviar Mensagem em Massa**
 
-class NotificationTemplates:
-    """Templates para notificações"""
-    
-    @staticmethod
-    def checklist_vencendo(checklist: Dict[str, Any], dias_restantes: int) -> str:
-        """Notificação de checklist vencendo"""
-        return f"""
-⚠️ **Checklist Vencendo**
+Digite a mensagem que deseja enviar para todos os usuários ativos do sistema.
 
-📋 **{checklist.get('tipo', 'Checklist').title()} #{checklist.get('id', 'N/A')}**
-⏰ Vence em **{dias_restantes} dia(s)**
+⚠️ **Atenção:** A mensagem será enviada imediatamente para todos os operadores logados.
 
-📝 {checklist.get('descricao', 'Sem descrição')}
+✏️ **Digite sua mensagem:**"""
 
-🚨 Não esqueça de completar antes do prazo!
-        """.strip()
-    
-    @staticmethod
-    def os_atualizada(os: Dict[str, Any], novo_status: str) -> str:
-        """Notificação de OS atualizada"""
-        return f"""
-🔔 **Ordem de Serviço Atualizada**
-
-🔧 **OS #{os.get('id', 'N/A')}** - {os.get('titulo', 'Sem título')}
-📊 **Novo status:** {MessageFormatter.status_emoji(novo_status)} {novo_status.title()}
-
-✉️ Verifique os detalhes no sistema.
-        """.strip()
-    
-    @staticmethod
-    def sistema_manutencao(inicio: datetime, fim: datetime) -> str:
-        """Notificação de manutenção do sistema"""
-        inicio_str = MessageFormatter.formato_datetime_br(inicio)
-        fim_str = MessageFormatter.formato_datetime_br(fim)
-        
-        return f"""
-🔧 **Manutenção Programada**
-
-⏰ **Início:** {inicio_str}
-⏰ **Fim:** {fim_str}
-
-Durante este período, o sistema pode ficar indisponível.
-
-💡 *Planeje suas atividades com antecedência.*
-        """.strip()
-
-class ReportTemplates:
-    """Templates para relatórios"""
-    
-    @staticmethod
-    def checklist_report_header(periodo: str, total: int) -> str:
-        """Cabeçalho do relatório de checklist"""
-        return f"""
-📊 **Relatório de Checklists**
-📅 **Período:** {periodo}
-📋 **Total:** {total} checklist(s)
-
-━━━━━━━━━━━━━━━━━━━━━━━
-        """.strip()
-    
-    @staticmethod
-    def financial_summary(dados: Dict[str, Any]) -> str:
-        """Resumo financeiro"""
-        total_gastos = MessageFormatter.formato_moeda_br(dados.get('total_gastos', 0))
-        media_mensal = MessageFormatter.formato_moeda_br(dados.get('media_mensal', 0))
-        
-        return f"""
-💰 **Resumo Financeiro**
-
-💳 **Total de Gastos:** {total_gastos}
-📊 **Média Mensal:** {media_mensal}
-📈 **Variação:** {dados.get('variacao_percentual', 0)}%
-
-🏆 **Maior Gasto:** {dados.get('maior_gasto_categoria', 'N/A')}
-💡 **Economia:** {dados.get('economia_sugerida', 'N/A')}
-        """.strip()
+# Exportar classes principais
+__all__ = [
+    'MessageTemplates',
+    'AdminTemplates'
+]

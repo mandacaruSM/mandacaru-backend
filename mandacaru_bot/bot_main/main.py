@@ -1,6 +1,7 @@
-# =============================
-# ARQUIVO CORRIGIDO: mandacaru_bot/bot_main/main.py
-# =============================
+# ===============================================
+# ARQUIVO FASE 2: mandacaru_bot/bot_main/main.py
+# Versão com módulos corrigidos
+# ===============================================
 
 import asyncio
 import logging
@@ -12,51 +13,8 @@ from aiogram.client.default import DefaultBotProperties
 from core.config import TELEGRAM_TOKEN
 from core.session import limpar_sessoes_expiradas
 
-# Imports dos handlers (apenas os que existem)
+# Imports dos handlers principais
 from bot_main.handlers import register_handlers as register_main_handlers
-
-# Imports opcionais (apenas se existirem)
-try:
-    from bot_main.admin_handlers import register_admin_handlers
-    ADMIN_HANDLERS_AVAILABLE = True
-except ImportError:
-    ADMIN_HANDLERS_AVAILABLE = False
-
-try:
-    from bot_checklist.handlers import register_handlers as register_checklist_handlers
-    CHECKLIST_HANDLERS_AVAILABLE = True
-except ImportError:
-    CHECKLIST_HANDLERS_AVAILABLE = False
-
-try:
-    from bot_abastecimento.handlers import register_handlers as register_abastecimento_handlers
-    ABASTECIMENTO_HANDLERS_AVAILABLE = True
-except ImportError:
-    ABASTECIMENTO_HANDLERS_AVAILABLE = False
-
-try:
-    from bot_os.handlers import register_handlers as register_os_handlers
-    OS_HANDLERS_AVAILABLE = True
-except ImportError:
-    OS_HANDLERS_AVAILABLE = False
-
-try:
-    from bot_financeiro.handlers import register_handlers as register_financeiro_handlers
-    FINANCEIRO_HANDLERS_AVAILABLE = True
-except ImportError:
-    FINANCEIRO_HANDLERS_AVAILABLE = False
-
-try:
-    from bot_qrcode.handlers import register_handlers as register_qrcode_handlers
-    QRCODE_HANDLERS_AVAILABLE = True
-except ImportError:
-    QRCODE_HANDLERS_AVAILABLE = False
-
-try:
-    from bot_equipamento.handlers import register_handlers as register_equipamento_handlers
-    EQUIPAMENTO_HANDLERS_AVAILABLE = True
-except ImportError:
-    EQUIPAMENTO_HANDLERS_AVAILABLE = False
 
 # Configurar logging
 logging.basicConfig(
@@ -65,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Criar instâncias do bot e dispatcher
+# Criar instâncias do bot e dispatcher GLOBALMENTE
 bot = Bot(
     token=TELEGRAM_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
@@ -81,36 +39,87 @@ async def register_all_handlers():
         register_main_handlers(dp)
         logger.info("✅ Handlers principais registrados")
         
-        # Handlers opcionais
-        if ADMIN_HANDLERS_AVAILABLE:
+        # Tentar carregar módulos específicos
+        modules_loaded = 0
+        
+        # Admin handlers
+        try:
+            from bot_main.admin_handlers import register_admin_handlers
             register_admin_handlers(dp)
             logger.info("✅ Handlers administrativos registrados")
+            modules_loaded += 1
+        except ImportError:
+            logger.info("⚠️ Admin handlers não encontrados")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao carregar admin handlers: {e}")
         
-        if CHECKLIST_HANDLERS_AVAILABLE:
+        # Checklist handlers (FASE 2)
+        try:
+            from bot_checklist.handlers import register_handlers as register_checklist_handlers
             register_checklist_handlers(dp)
             logger.info("✅ Handlers de checklist registrados")
+            modules_loaded += 1
+        except ImportError:
+            logger.info("⚠️ Checklist handlers não encontrados")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao carregar checklist handlers: {e}")
         
-        if ABASTECIMENTO_HANDLERS_AVAILABLE:
+        # Abastecimento handlers
+        try:
+            from bot_abastecimento.handlers import register_handlers as register_abastecimento_handlers
             register_abastecimento_handlers(dp)
             logger.info("✅ Handlers de abastecimento registrados")
+            modules_loaded += 1
+        except ImportError:
+            logger.info("⚠️ Abastecimento handlers não encontrados")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao carregar abastecimento handlers: {e}")
         
-        if OS_HANDLERS_AVAILABLE:
+        # OS handlers
+        try:
+            from bot_os.handlers import register_handlers as register_os_handlers
             register_os_handlers(dp)
             logger.info("✅ Handlers de OS registrados")
+            modules_loaded += 1
+        except ImportError:
+            logger.info("⚠️ OS handlers não encontrados")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao carregar OS handlers: {e}")
         
-        if FINANCEIRO_HANDLERS_AVAILABLE:
+        # Financeiro handlers
+        try:
+            from bot_financeiro.handlers import register_handlers as register_financeiro_handlers
             register_financeiro_handlers(dp)
             logger.info("✅ Handlers financeiros registrados")
+            modules_loaded += 1
+        except ImportError:
+            logger.info("⚠️ Financeiro handlers não encontrados")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao carregar financeiro handlers: {e}")
         
-        if QRCODE_HANDLERS_AVAILABLE:
+        # QR Code handlers
+        try:
+            from bot_qrcode.handlers import register_handlers as register_qrcode_handlers
             register_qrcode_handlers(dp)
             logger.info("✅ Handlers de QR Code registrados")
+            modules_loaded += 1
+        except ImportError:
+            logger.info("⚠️ QR Code handlers não encontrados")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao carregar QR Code handlers: {e}")
         
-        if EQUIPAMENTO_HANDLERS_AVAILABLE:
+        # Equipamento handlers
+        try:
+            from bot_equipamento.handlers import register_handlers as register_equipamento_handlers
             register_equipamento_handlers(dp)
             logger.info("✅ Handlers de equipamento registrados")
+            modules_loaded += 1
+        except ImportError:
+            logger.info("⚠️ Equipamento handlers não encontrados")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao carregar equipamento handlers: {e}")
         
-        logger.info("🎉 Todos os handlers disponíveis foram registrados!")
+        logger.info(f"🎉 Handlers registrados: 1 principal + {modules_loaded} módulos específicos")
         
     except Exception as e:
         logger.error(f"❌ Erro ao registrar handlers: {e}")
@@ -121,7 +130,7 @@ async def cleanup_task():
     while True:
         try:
             await asyncio.sleep(3600)  # Executar a cada hora
-            removed = await limpar_sessoes_expiradas(24)
+            removed = limpar_sessoes_expiradas(24)
             if removed > 0:
                 logger.info(f"🧹 Limpeza: {removed} sessões expiradas removidas")
         except Exception as e:
@@ -130,7 +139,7 @@ async def cleanup_task():
 async def main():
     """Função principal do bot"""
     try:
-        logger.info("🤖 Iniciando Bot Telegram Mandacaru...")
+        logger.info("🤖 Iniciando Bot Telegram Mandacaru - FASE 2...")
         
         # Registrar handlers
         await register_all_handlers()
@@ -139,7 +148,7 @@ async def main():
         cleanup_task_handle = asyncio.create_task(cleanup_task())
         
         # Iniciar bot
-        logger.info("🚀 Bot iniciado com sucesso!")
+        logger.info("🚀 Bot FASE 2 iniciado com sucesso!")
         await dp.start_polling(bot)
         
     except Exception as e:
