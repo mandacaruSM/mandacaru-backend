@@ -10,6 +10,14 @@ from backend.apps.nr12_checklist.views_bot import checklists_bot, equipamentos_o
 from backend.apps.equipamentos.views_bot import equipamentos_publicos, checklists_equipamento  
 from backend.apps.operadores.views_bot import atualizar_operador
 import os
+#from backend.apps.nr12_checklist.views_bot import atualizar_item_bot
+
+# REMOVER ESTA LINHA QUE ESTÁ CAUSANDO ERRO:
+# from apps.core.views import HealthCheckView
+
+def health_check(request):
+    """Endpoint de health check simples"""
+    return JsonResponse({'status': 'ok', 'message': 'API OK'})
 
 @csrf_exempt
 def api_root(request):
@@ -61,6 +69,10 @@ urlpatterns = [
     path('api/operadores/', include('backend.apps.operadores.api_urls')),
     path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
     path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
+    #path('api/nr12/bot/item/<int:item_id>/', atualizar_item_bot, name='atualizar-item-bot'),
+    
+    # CORRIGIR ESTA LINHA - usar a função em vez da classe
+    path('api/health/', health_check, name='health_check'),
 
     # Endpoints específicos do bot
 #    path('bot/', include('backend.apps.operadores.urls_bot')),
