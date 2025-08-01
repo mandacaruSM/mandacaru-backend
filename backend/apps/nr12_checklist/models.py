@@ -250,7 +250,7 @@ class ChecklistNR12(models.Model):
             itens_padrao = ItemChecklistPadrao.objects.filter(
                 tipo_equipamento=self.equipamento.tipo_nr12,
                 ativo=True
-            ).order_by('ordem')
+            ).order_by('item_padrao__ordem')
             
             for item_padrao in itens_padrao:
                 ItemChecklistRealizado.objects.get_or_create(

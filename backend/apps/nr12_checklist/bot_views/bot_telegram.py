@@ -124,7 +124,7 @@ class EquipamentoAcessoBotView(View):
             hoje = timezone.now().date()
             checklists_hoje = ChecklistNR12.objects.filter(
                 equipamento=equipamento,
-                data_realizacao=hoje
+                data_checklist=hoje
             ).order_by('-created_at')
 
             # Determinar ações disponíveis
@@ -265,7 +265,7 @@ class EquipamentoAcessoBotView(View):
             hoje = timezone.now().date()
             if ChecklistNR12.objects.filter(
                 equipamento=equipamento,
-                data_realizacao=hoje,
+                data_checklist=hoje,
                 turno=turno
             ).exists():
                 return JsonResponse({
@@ -286,10 +286,9 @@ class EquipamentoAcessoBotView(View):
                 checklist = ChecklistNR12.objects.create(
                     equipamento=equipamento,
                     responsavel=operador.user,
-                    tipo_equipamento=tipo_nr12,
                     turno=turno,
                     frequencia=frequencia,
-                    data_realizacao=hoje,
+                    data_checklist=hoje,
                     status='PENDENTE'
                 )
 
@@ -303,7 +302,6 @@ class EquipamentoAcessoBotView(View):
                     ItemChecklistRealizado.objects.create(
                         checklist=checklist,
                         item_padrao=item_padrao,
-                        ordem=item_padrao.ordem,
                         status='PENDENTE'
                     )
 
@@ -348,7 +346,7 @@ class EquipamentoAcessoBotView(View):
             # Obter primeiro item
             primeiro_item = checklist.itens.filter(
                 status='PENDENTE'
-            ).order_by('ordem').first()
+            ).order_by('item_padrao__ordem').first()
 
             if primeiro_item:
                 item_info = {
@@ -390,7 +388,7 @@ class EquipamentoAcessoBotView(View):
             # Obter próximo item pendente
             proximo_item = checklist.itens.filter(
                 status='PENDENTE'
-            ).order_by('ordem').first()
+            ).order_by('item_padrao__ordem').first()
 
             if not proximo_item:
                 return JsonResponse({
@@ -410,7 +408,6 @@ class EquipamentoAcessoBotView(View):
                 'categoria': proximo_item.item_padrao.categoria,
                 'permite_na': proximo_item.item_padrao.permite_na,
                 'requer_observacao': proximo_item.item_padrao.requer_observacao_se_nok,
-                'ordem': proximo_item.ordem,
                 'total_itens': checklist.total_itens,
                 'itens_verificados': checklist.itens_verificados,
             }
@@ -561,7 +558,7 @@ def atualizar_item_checklist(request):
         # Obter próximo item
         proximo_item = checklist.itens.filter(
             status='PENDENTE'
-        ).order_by('ordem').first()
+        ).order_by('item_padrao__ordem').first()
 
         if proximo_item:
             proximo_item_info = {
@@ -601,3 +598,4 @@ def atualizar_item_checklist(request):
             'success': False,
             'error': f'Erro ao atualizar item: {str(e)}'
         }, status=500)
+

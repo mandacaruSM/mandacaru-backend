@@ -148,7 +148,7 @@ class ChecklistNR12(models.Model):
     
     def get_proximo_item(self):
         """Retorna próximo item pendente"""
-        return self.itens.filter(status='PENDENTE').order_by('ordem').first()
+        return self.itens.filter(status='PENDENTE').order_by('item_padrao__ordem').first()
     
     def pode_ser_editado_por(self, user):
         """Verifica se o usuário pode editar o checklist"""

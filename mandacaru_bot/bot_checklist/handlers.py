@@ -14,6 +14,16 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+from core.db import (
+    # Funções NR12 reais
+    buscar_checklists_nr12, criar_checklist_nr12,
+    buscar_itens_checklist_nr12, atualizar_item_checklist_nr12_com_operador,  # NOVA FUNÇÃO
+    finalizar_checklist_nr12, buscar_equipamentos_com_nr12,
+    verificar_checklist_equipamento_hoje, buscar_checklists_operador_hoje,
+    buscar_itens_padrao_nr12,
+    # Funções gerais
+    listar_equipamentos
+)
 # Imports do core
 from core.session import (
     obter_operador_sessao, verificar_autenticacao,
@@ -669,6 +679,10 @@ async def mostrar_proximo_item(message: Message, operador: dict, state: FSMConte
         logger.error(f"Erro ao mostrar próximo item: {e}")
         await message.answer("❌ Erro ao exibir item do checklist.")
 
+# ===============================================
+# FUNÇÃO CORRIGIDA: processar_resposta_checklist
+# ===============================================
+
 async def processar_resposta_checklist(callback: CallbackQuery, operador: dict, state: FSMContext):
     """Processa a resposta do operador para um item do checklist"""
     try:
@@ -709,12 +723,12 @@ async def processar_resposta_checklist(callback: CallbackQuery, operador: dict, 
         # Processar resposta OK/NOK
         status = 'OK' if resposta_tipo == 'ok' else 'NOK'
         
-        # Atualizar item no backend
-        sucesso = await atualizar_item_checklist_nr12(
+        # CORREÇÃO: Usar função com operador real
+        sucesso = await atualizar_item_checklist_nr12_com_operador(
             item_id=item_id,
             status=status,
-            observacao="",
-            responsavel_id=operador.get('id')
+            chat_id=chat_id,  # Passar chat_id para buscar operador
+            observacao=""
         )
         
         if not sucesso:
@@ -749,6 +763,10 @@ async def processar_resposta_checklist(callback: CallbackQuery, operador: dict, 
         logger.error(f"Erro ao processar resposta: {e}")
         await callback.answer("❌ Erro interno")
 
+# ===============================================
+# FUNÇÃO CORRIGIDA: processar_observacao_item
+# ===============================================
+
 async def processar_observacao_item(message: Message, state: FSMContext):
     """Processa observação digitada pelo operador"""
     try:
@@ -773,41 +791,52 @@ async def processar_observacao_item(message: Message, state: FSMContext):
         
         observacao = message.text.strip()
         
-        # Atualizar item com observação
-        sucesso = await atualizar_item_checklist_nr12(
+        # CORREÇÃO: Usar função com operador real - só observação
+        sucesso = await atualizar_item_checklist_nr12_com_operador(
             item_id=item_id,
-            status='PENDENTE',
-            observacao=observacao,
-            responsavel_id=operador.get('id')
+            status='PENDENTE',  # Manter status atual
+            chat_id=chat_id,
+            observacao=observacao
         )
         
         if sucesso:
             await message.answer(
                 f"📝 **Observação salva com sucesso!**\n\n"
                 f"💬 *{observacao}*\n\n"
-                f"🎯 Agora selecione o status do item:",
+                f"✅ Agora marque este item como conforme ou não conforme.",
                 parse_mode='Markdown'
             )
             
-            # Voltar para seleção de status
+            # Limpar dados temporários de observação
+            await definir_dados_temporarios(chat_id, 'item_observacao', None)
             await state.set_state(ChecklistStates.executando_checklist)
             
-            # Mostrar botões OK/NOK para o item atual
-            keyboard = [
-                [
-                    InlineKeyboardButton(text="✅ Conforme (OK)", callback_data=f"resposta_ok_{item_id}"),
-                    InlineKeyboardButton(text="❌ Não Conforme (NOK)", callback_data=f"resposta_nok_{item_id}")
-                ]
-            ]
-            markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-            await message.answer("❓ **Este item está conforme?**", reply_markup=markup)
-            
+            # Reexibir o item atual para marcar
+            dados = await obter_dados_checklist(chat_id)
+            if dados:
+                await mostrar_proximo_item(message, operador, state)
         else:
             await message.answer("❌ Erro ao salvar observação. Tente novamente.")
-        
+    
     except Exception as e:
         logger.error(f"Erro ao processar observação: {e}")
-        await message.answer("❌ Erro ao salvar observação.")
+        await message.answer("❌ Erro interno ao salvar observação.")
+
+# ===============================================
+# HANDLER PARA OBSERVAÇÃO
+# ===============================================
+
+async def handle_observacao_state(message: Message, state: FSMContext):
+    """Handler para capturar observações"""
+    chat_id = str(message.from_user.id)
+    operador = await obter_operador_sessao(chat_id)
+    
+    if not operador:
+        await message.answer("❌ Sessão expirada")
+        await state.clear()
+        return
+    
+    await processar_observacao_item(message, state)
 
 async def finalizar_checklist_completo(message: Message, operador: dict, state: FSMContext):
     """Finaliza o checklist e mostra resumo"""

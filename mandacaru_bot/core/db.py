@@ -482,7 +482,7 @@ async def atualizar_item_checklist_nr12(
     responsavel_id: Optional[int] = None
 ) -> bool:
     """
-    Atualiza um item do checklist NR12
+    Atualiza um item do checklist NR12 usando o endpoint específico do bot
     
     Args:
         item_id: ID do item
@@ -494,48 +494,179 @@ async def atualizar_item_checklist_nr12(
         True se atualizado com sucesso
     """
     try:
-        # Endpoint correto baseado na API vista
-        url = f"{API_BASE_URL}/nr12/itens-checklist/{item_id}/"
+        # ENDPOINT CORRETO DO BOT (sem autenticação)
+        url = f"{API_BASE_URL}/nr12/bot/item-checklist/atualizar/"
         
         # Mapear status do bot para o formato da API
         status_map = {
             'OK': 'OK',
-            'NOK': 'NOK',  # ou pode ser 'NAO_CONFORME'
-            'PENDENTE': 'PENDENTE'
+            'NOK': 'NOK',
+            'PENDENTE': 'PENDENTE',
+            'NA': 'NA'
         }
         
+        # Dados conforme documentação da API do bot
         data = {
+            'item_id': item_id,
             'status': status_map.get(status, status),
-            'observacao': observacao
+            'observacao': observacao,
+            'operador_codigo': 'BOT001'  # Código padrão do bot
         }
         
-        if responsavel_id:
-            data['verificado_por'] = responsavel_id
-        
-        logger.info(f"Atualizando item {item_id}: {data}")
+        logger.info(f"🔄 Atualizando item {item_id} via endpoint do bot: {data}")
         
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            # Tentar PUT primeiro
-            response = await client.put(url, json=data)
+            # Usar POST conforme documentação
+            response = await client.post(url, json=data)
             
-            if response.status_code in [200, 201]:
-                logger.info(f"✅ Item {item_id} atualizado com sucesso via PUT")
-                return True
+            if response.status_code == 200:
+                result = response.json()
+                
+                if result.get('success'):
+                    logger.info(f"✅ Item {item_id} atualizado com sucesso!")
+                    
+                    # Log adicional se houver próximo item
+                    if 'proximo_item' in result:
+                        proximo = result['proximo_item']
+                        logger.info(f"📋 Próximo item disponível: {proximo.get('id')} - {proximo.get('item_padrao_nome', 'N/A')}")
+                    
+                    return True
+                else:
+                    error_msg = result.get('error', 'Erro desconhecido')
+                    logger.error(f"❌ Erro da API ao atualizar item {item_id}: {error_msg}")
+                    return False
+                    
+            elif response.status_code == 400:
+                # Erro de validação - log detalhado
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get('error', 'Erro de validação')
+                    logger.error(f"❌ Erro de validação no item {item_id}: {error_msg}")
+                except:
+                    logger.error(f"❌ Erro 400 ao atualizar item {item_id}: {response.text}")
+                return False
+                
+            elif response.status_code == 403:
+                logger.error(f"❌ Operador não autorizado para item {item_id}")
+                return False
+                
+            elif response.status_code == 404:
+                logger.error(f"❌ Item {item_id} não encontrado ou endpoint incorreto")
+                return False
+                
+            else:
+                logger.error(f"❌ Erro HTTP {response.status_code} ao atualizar item {item_id}")
+                logger.error(f"   Resposta: {response.text}")
+                return False
+                
+    except httpx.TimeoutException:
+        logger.error(f"❌ Timeout ao atualizar item {item_id}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"❌ Erro inesperado ao atualizar item {item_id}: {e}")
+        return False
+
+# ===============================================
+# FUNÇÃO ADICIONAL: Obter código do operador
+# ===============================================
+
+async def obter_codigo_operador_por_chat_id(chat_id: str) -> Optional[str]:
+    """
+    Obtém o código do operador baseado no chat_id do Telegram
+    
+    Args:
+        chat_id: ID do chat do Telegram
+        
+    Returns:
+        Código do operador ou None se não encontrado
+    """
+    try:
+        url = f"{API_BASE_URL}/operadores/"
+        params = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
             
-            # Se PUT não funcionar, tentar PATCH
-            response = await client.patch(url, json=data)
+            if response.status_code == 200:
+                data = response.json()
+                resultados = data.get('results', [])
+                
+                if resultados:
+                    operador = resultados[0]
+                    codigo = operador.get('codigo')
+                    logger.info(f"✅ Código do operador encontrado: {codigo}")
+                    return codigo
             
-            if response.status_code in [200, 201]:
-                logger.info(f"✅ Item {item_id} atualizado com sucesso via PATCH")
-                return True
-            
-            # Log da resposta de erro
-            logger.error(f"Erro ao atualizar item {item_id}: {response.status_code}")
-            logger.error(f"Resposta: {response.text}")
-            return False
+            logger.warning(f"⚠️ Operador não encontrado para chat_id: {chat_id}")
+            return None
                 
     except Exception as e:
-        logger.error(f"Erro ao atualizar item: {e}")
+        logger.error(f"❌ Erro ao buscar código do operador: {e}")
+        return None
+
+# ===============================================
+# VERSÃO MELHORADA: Atualizar com operador real
+# ===============================================
+
+async def atualizar_item_checklist_nr12_com_operador(
+    item_id: int,
+    status: str,
+    chat_id: str,
+    observacao: str = ""
+) -> bool:
+    """
+    Atualiza um item do checklist usando o operador real do chat
+    
+    Args:
+        item_id: ID do item
+        status: Status do item (OK, NOK, PENDENTE)
+        chat_id: ID do chat do Telegram
+        observacao: Observação opcional
+        
+    Returns:
+        True se atualizado com sucesso
+    """
+    try:
+        # Obter código do operador real
+        operador_codigo = await obter_codigo_operador_por_chat_id(chat_id)
+        
+        if not operador_codigo:
+            logger.warning(f"⚠️ Usando código padrão do bot para chat_id: {chat_id}")
+            operador_codigo = 'BOT001'
+        
+        # Endpoint específico do bot
+        url = f"{API_BASE_URL}/nr12/bot/item-checklist/atualizar/"
+        
+        # Dados da requisição
+        data = {
+            'item_id': item_id,
+            'status': status,
+            'observacao': observacao,
+            'operador_codigo': operador_codigo
+        }
+        
+        logger.info(f"🔄 Atualizando item {item_id} com operador {operador_codigo}")
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=data)
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                if result.get('success'):
+                    logger.info(f"✅ Item {item_id} atualizado com sucesso!")
+                    return True
+                else:
+                    error_msg = result.get('error', 'Erro desconhecido')
+                    logger.error(f"❌ Erro da API: {error_msg}")
+                    return False
+            else:
+                logger.error(f"❌ Erro HTTP {response.status_code}: {response.text}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"❌ Erro ao atualizar item {item_id}: {e}")
         return False
 
 async def finalizar_checklist_nr12(
