@@ -598,4 +598,3 @@ def atualizar_item_checklist(request):
             'success': False,
             'error': f'Erro ao atualizar item: {str(e)}'
         }, status=500)
-

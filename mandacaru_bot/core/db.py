@@ -360,6 +360,47 @@ async def buscar_itens_padrao_nr12(tipo_equipamento_id: Optional[int] = None) ->
         logger.error(f"Erro ao buscar itens padrão NR12: {e}")
         return []
 
+async def iniciar_checklist_nr12(checklist_id: int, responsavel_id: int):
+    """Inicia um checklist NR12"""
+    try:
+        url = f"{API_BASE_URL}/nr12/checklists/{checklist_id}/iniciar/"
+        data = {"responsavel": responsavel_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json=data)
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"✅ Checklist {checklist_id} iniciado com sucesso")
+                return result
+            else:
+                logger.error(f"❌ Erro ao iniciar checklist {checklist_id}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"❌ Erro ao iniciar checklist {checklist_id}: {e}")
+        return None
+
+async def finalizar_checklist_nr12(checklist_id: int):
+    """Finaliza um checklist NR12"""
+    try:
+        url = f"{API_BASE_URL}/nr12/checklists/{checklist_id}/finalizar/"
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.post(url, json={})
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"✅ Checklist {checklist_id} finalizado com sucesso")
+                return result
+            else:
+                logger.error(f"❌ Erro ao finalizar checklist {checklist_id}: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"❌ Erro ao finalizar checklist {checklist_id}: {e}")
+        return None
+
 async def buscar_checklists_nr12(
     equipamento_id: Optional[int] = None,
     status: Optional[str] = None,
