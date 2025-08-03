@@ -413,15 +413,17 @@ async def finalizar_checklist_nr12(checklist_id: int):
 async def buscar_checklists_nr12(
     equipamento_id: Optional[int] = None,
     status: Optional[str] = None,
-    data_checklist: Optional[str] = None
+    data_checklist: Optional[str] = None,
+    operador_id: Optional[int] = None  # ✅ NOVO PARÂMETRO
 ) -> List[Dict[str, Any]]:
     """
-    Busca checklists NR12
+    Busca checklists NR12 da API
     
     Args:
         equipamento_id: ID do equipamento (opcional)
         status: Status do checklist (opcional)
         data_checklist: Data do checklist (YYYY-MM-DD) (opcional)
+        operador_id: ID do operador (opcional) ✅ NOVO
         
     Returns:
         Lista de checklists
@@ -436,6 +438,8 @@ async def buscar_checklists_nr12(
             params['status'] = status
         if data_checklist:
             params['data_checklist'] = data_checklist
+        if operador_id:  # ✅ ADICIONAR ESTA LINHA
+            params['operador_id'] = operador_id
         
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.get(url, params=params)
@@ -452,7 +456,48 @@ async def buscar_checklists_nr12(
     except Exception as e:
         logger.error(f"Erro ao buscar checklists NR12: {e}")
         return []
-
+    
+    """
+    Busca checklists NR12 da API
+    
+    Args:
+        equipamento_id: ID do equipamento (opcional)
+        status: Status do checklist (opcional)
+        data_checklist: Data do checklist (YYYY-MM-DD) (opcional)
+        operador_id: ID do operador (opcional) ✅ NOVO
+        
+    Returns:
+        Lista de checklists
+    """
+    try:
+        url = f"{API_BASE_URL}/nr12/checklists/"
+        params = {}
+        
+        if equipamento_id:
+            params['equipamento'] = equipamento_id
+        if status:
+            params['status'] = status
+        if data_checklist:
+            params['data_checklist'] = data_checklist
+        if operador_id:  # ✅ ADICIONAR ESTA LINHA
+            params['operador_id'] = operador_id
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                checklists = data.get('results', []) if isinstance(data, dict) else data
+                logger.info(f"Encontrados {len(checklists)} checklists NR12")
+                return checklists
+            else:
+                logger.error(f"Erro ao buscar checklists NR12: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        logger.error(f"Erro ao buscar checklists NR12: {e}")
+        return []
+    
 async def criar_checklist_nr12(
     equipamento_id: int,
     responsavel_id: Optional[int] = None,
