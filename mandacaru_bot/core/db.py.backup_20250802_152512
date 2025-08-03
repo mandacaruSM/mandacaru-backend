@@ -364,18 +364,10 @@ async def iniciar_checklist_nr12(checklist_id: int, responsavel_id: int):
     """Inicia um checklist NR12"""
     try:
         url = f"{API_BASE_URL}/nr12/checklists/{checklist_id}/iniciar/"
-        
-        # TESTAR DADOS MÍNIMOS
-        data = {
-            "responsavel": responsavel_id
-        }
-        
-        logger.info(f"🔄 Iniciando checklist {checklist_id} com dados: {data}")
+        data = {"responsavel": responsavel_id}
         
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.post(url, json=data)
-            
-            logger.info(f"📊 Resposta da API: {response.status_code} - {response.text}")
             
             if response.status_code == 200:
                 result = response.json()
@@ -383,7 +375,6 @@ async def iniciar_checklist_nr12(checklist_id: int, responsavel_id: int):
                 return result
             else:
                 logger.error(f"❌ Erro ao iniciar checklist {checklist_id}: {response.status_code}")
-                logger.error(f"❌ Detalhes: {response.text}")
                 return None
                 
     except Exception as e:
@@ -529,105 +520,128 @@ async def atualizar_item_checklist_nr12(
     item_id: int,
     status: str,
     observacao: str = "",
-    operador_nome: str = None
+    responsavel_id: Optional[int] = None,
+    chat_id: Optional[str] = None  # NOVO PARÂMETRO
 ) -> bool:
     """
-    Atualiza item usando endpoint correto baseado no GitHub
-    Endpoint: /api/nr12/bot/item-checklist/atualizar/
+    Atualiza um item do checklist NR12 usando o operador correto
+    
+    Args:
+        item_id: ID do item
+        status: Status do item (OK, NOK, PENDENTE)
+        observacao: Observação opcional
+        responsavel_id: ID do responsável (opcional)
+        chat_id: ID do chat do Telegram (NOVO - para buscar operador real)
+        
+    Returns:
+        True se atualizado com sucesso
     """
     try:
+        # CORREÇÃO: Obter código do operador real
+        operador_codigo = 'BOT001'  # Valor padrão
+        
+        if chat_id:
+            # Tentar obter código do operador real
+            operador_codigo_real = await obter_codigo_operador_por_chat_id(chat_id)
+            if operador_codigo_real:
+                operador_codigo = operador_codigo_real
+                logger.info(f"✅ Usando operador real: {operador_codigo}")
+            else:
+                logger.warning(f"⚠️ Operador não encontrado para chat_id: {chat_id}, usando BOT001")
+        
+        # Endpoint específico do bot
         url = f"{API_BASE_URL}/nr12/bot/item-checklist/atualizar/"
         
-        # Dados conforme documentação real do GitHub
-        data = {
-            'item_id': item_id,
-            'status': status,
-            'operador_codigo': "OP0001",  # Código correto encontrado
-            'observacao': observacao
+        # Mapear status do bot para o formato da API
+        status_map = {
+            'OK': 'OK',
+            'NOK': 'NOK', 
+            'PENDENTE': 'PENDENTE',
+            'NA': 'NA'
         }
         
-        logger.info(f"🔄 Atualizando item {item_id} com dados corretos: {data}")
+        # Dados da requisição
+        data = {
+            'item_id': item_id,
+            'status': status_map.get(status, status),
+            'observacao': observacao,
+            'operador_codigo': operador_codigo  # AGORA USA OPERADOR REAL
+        }
+        
+        logger.info(f"🔄 Atualizando item {item_id} com operador {operador_codigo}: {data}")
         
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.post(url, json=data)
             
             if response.status_code == 200:
                 result = response.json()
+                
                 if result.get('success'):
                     logger.info(f"✅ Item {item_id} atualizado com sucesso!")
-                    
-                    # Verificar se há próximo item (conforme documentação)
-                    if 'proximo_item' in result and result['proximo_item']:
-                        logger.info(f"📋 Próximo item: {result['proximo_item'].get('id')}")
-                    else:
-                        logger.info(f"🏁 Todos os itens foram verificados!")
-                    
-                    return result  # Retornar resultado completo
+                    return True
                 else:
-                    logger.error(f"❌ API erro: {result.get('error')}")
+                    error_msg = result.get('error', 'Erro desconhecido')
+                    logger.error(f"❌ API retornou erro: {error_msg}")
                     return False
             else:
-                logger.error(f"❌ HTTP {response.status_code}: {response.text}")
+                # Tentar endpoint alternativo se falhar
+                logger.warning(f"⚠️ Endpoint bot falhou ({response.status_code}), tentando endpoint direto...")
+                return await tentar_endpoint_alternativo(item_id, status, observacao, operador_codigo)
+                
+    except httpx.TimeoutException:
+        logger.error(f"❌ Timeout ao atualizar item {item_id}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"❌ Erro inesperado ao atualizar item {item_id}: {e}")
+        return False
+
+# ===============================================
+# NOVA FUNÇÃO: Tentar endpoint alternativo
+# ===============================================
+
+async def tentar_endpoint_alternativo(
+    item_id: int,
+    status: str,
+    observacao: str,
+    operador_codigo: str
+) -> bool:
+    """
+    Tenta usar endpoint direto da API quando endpoint do bot falha
+    """
+    try:
+        # Endpoint direto da API NR12
+        url = f"{API_BASE_URL}/nr12/item-checklist/{item_id}/atualizar/"
+        
+        data = {
+            'status': status,
+            'observacao': observacao,
+            'operador_codigo': operador_codigo
+        }
+        
+        logger.info(f"🔄 Tentando endpoint alternativo: {url}")
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.patch(url, json=data)  # PATCH para endpoint direto
+            
+            if response.status_code in [200, 204]:
+                logger.info(f"✅ Item {item_id} atualizado via endpoint alternativo!")
+                return True
+            else:
+                logger.error(f"❌ Endpoint alternativo também falhou: {response.status_code}")
+                try:
+                    error_detail = response.json()
+                    logger.error(f"❌ Detalhes do erro: {error_detail}")
+                except:
+                    logger.error(f"❌ Resposta: {response.text}")
                 return False
                 
     except Exception as e:
-        logger.error(f"❌ Erro: {e}")
+        logger.error(f"❌ Erro no endpoint alternativo: {e}")
         return False
 
-async def iniciar_checklist_nr12(checklist_id: int, responsavel_id: int = None):
-    """
-    Inicia checklist usando endpoint correto
-    Endpoint: /api/nr12/checklists/{id}/iniciar/
-    """
-    try:
-        url = f"{API_BASE_URL}/nr12/checklists/{checklist_id}/iniciar/"
-        
-        # Conforme documentação do GitHub - dados mínimos
-        data = {}  # Não enviar responsável para evitar erro de tipo
-        
-        logger.info(f"🔄 Iniciando checklist {checklist_id}")
-        
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.post(url, json=data)
-            
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"✅ Checklist {checklist_id} iniciado com sucesso")
-                return result
-            else:
-                logger.error(f"❌ Erro {response.status_code}: {response.text}")
-                return None
-                
-    except Exception as e:
-        logger.error(f"❌ Erro: {e}")
-        return None
-
-async def finalizar_checklist_nr12(checklist_id: int):
-    """
-    Finaliza checklist usando endpoint correto
-    Endpoint: /api/nr12/checklists/{id}/finalizar/
-    """
-    try:
-        url = f"{API_BASE_URL}/nr12/checklists/{checklist_id}/finalizar/"
-        
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.post(url, json={})
-            
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"✅ Checklist {checklist_id} finalizado com sucesso")
-                return result
-            else:
-                logger.error(f"❌ Erro ao finalizar: {response.status_code} - {response.text}")
-                return None
-                
-    except Exception as e:
-        logger.error(f"❌ Erro: {e}")
-        return None
-
-
 # ===============================================
-# FUNÇÃO ADICIONAL: Obter código do operador
+# NOVA FUNÇÃO: Buscar operador por chat_id
 # ===============================================
 
 async def obter_codigo_operador_por_chat_id(chat_id: str) -> Optional[str]:
@@ -644,6 +658,8 @@ async def obter_codigo_operador_por_chat_id(chat_id: str) -> Optional[str]:
         url = f"{API_BASE_URL}/operadores/"
         params = {'chat_id_telegram': chat_id}
         
+        logger.info(f"🔍 Buscando operador para chat_id: {chat_id}")
+        
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             response = await client.get(url, params=params)
             
@@ -654,14 +670,46 @@ async def obter_codigo_operador_por_chat_id(chat_id: str) -> Optional[str]:
                 if resultados:
                     operador = resultados[0]
                     codigo = operador.get('codigo')
-                    logger.info(f"✅ Código do operador encontrado: {codigo}")
+                    nome = operador.get('nome', 'N/A')
+                    logger.info(f"✅ Operador encontrado: {nome} (código: {codigo})")
                     return codigo
-            
-            logger.warning(f"⚠️ Operador não encontrado para chat_id: {chat_id}")
-            return None
+                else:
+                    logger.warning(f"⚠️ Nenhum operador encontrado para chat_id: {chat_id}")
+                    return None
+            else:
+                logger.error(f"❌ Erro ao buscar operador: {response.status_code}")
+                return None
                 
     except Exception as e:
         logger.error(f"❌ Erro ao buscar código do operador: {e}")
+        return None
+
+# ===============================================
+# FUNÇÃO AUXILIAR: Buscar operador por chat_id (alternativa)
+# ===============================================
+
+async def buscar_operador_por_chat_id(chat_id: str) -> Optional[Dict]:
+    """
+    Busca operador completo por chat_id
+    """
+    try:
+        url = f"{API_BASE_URL}/operadores/"
+        params = {'chat_id_telegram': chat_id}
+        
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                resultados = data.get('results', [])
+                
+                if resultados:
+                    return resultados[0]
+                    
+        return None
+                
+    except Exception as e:
+        logger.error(f"❌ Erro ao buscar operador: {e}")
         return None
 
 # ===============================================
@@ -834,40 +882,6 @@ async def verificar_checklist_equipamento_hoje(equipamento_id: int) -> Optional[
     except Exception as e:
         logger.error(f"Erro ao verificar checklist do equipamento: {e}")
         return None
-
-
-async def atualizar_item_checklist_nr12_alternativo(
-    item_id: int,
-    status: str,
-    observacao: str = "",
-    operador_id: int = 1
-) -> bool:
-    """Endpoint alternativo sem autenticação"""
-    try:
-        # ENDPOINT DIRETO (sem /bot/)
-        url = f"{API_BASE_URL}/nr12/item-checklist/{item_id}/atualizar/"
-        
-        data = {
-            'status': status,
-            'observacao': observacao,
-            'responsavel_id': operador_id
-        }
-        
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.put(url, json=data)  # PUT ao invés de POST
-            
-            if response.status_code == 200:
-                logger.info(f"✅ Item {item_id} atualizado via endpoint alternativo!")
-                return True
-            else:
-                logger.error(f"❌ Endpoint alternativo falhou: {response.status_code}")
-                return False
-                
-    except Exception as e:
-        logger.error(f"❌ Erro no endpoint alternativo: {e}")
-        return False
-    
-
 
 # ===============================================
 # FUNÇÕES DE COMPATIBILIDADE

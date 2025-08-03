@@ -1,0 +1,24 @@
+{
+  "timestamp": "20250802_154134",
+  "operador": {
+    "id": 9,
+    "codigo": "OP0001",
+    "nome": "willians guizardi machado",
+    "data_nascimento": "1985-09-28",
+    "status": "ATIVO",
+    "ativo_bot": true,
+    "chat_id_telegram": "123456789"
+  },
+  "resultados": {
+    "busca_operador": true,
+    "endpoint_correto": false,
+    "iniciar_checklist": false,
+    "debug_completo": true
+  },
+  "conclusoes": [
+    "Endpoint /nr12/bot/item-checklist/atualizar/ NÃO EXISTE",
+    "Usar endpoint /nr12/itens-checklist/{id}/ com PATCH",
+    "Problema no iniciar checklist: responsavel deve ser UsuarioCliente ID",
+    "Operador encontrado corretamente na API"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "timestamp": "20250802_152838",
+  "chat_id_teste": "853870420",
+  "item_id_teste": 105,
+  "resultados": {
+    "busca_operador": true,
+    "endpoint_bot": false,
+    "endpoint_direto": false,
+    "listar_checklists": true,
+    "iniciar_checklist": false
+  }
+}
