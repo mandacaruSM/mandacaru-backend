@@ -180,16 +180,16 @@ QR_CODE_SIZE = (300, 300)
 
 CELERY_BEAT_SCHEDULE = {
     'checklists_diarios_6h': {
-        'task': 'backend.apps.nr12_checklist.tasks.gerar_checklists_diarios',
+        'task': 'backend.apps.core.tasks.gerar_checklists_automatico',  # ✅ EXISTE
         'schedule': crontab(hour=6, minute=0),
     },
     'checklists_semanais_segunda_6h': {
-        'task': 'backend.apps.nr12_checklist.tasks.gerar_checklists_semanais',
-        'schedule': crontab(hour=6, minute=0, day_of_week='mon'),
+        'task': 'backend.apps.core.tasks.gerar_checklists_automatico',  # ✅ EXISTE
+        'schedule': crontab(hour=6, minute=0, day_of_week=1),  # 1 = segunda
     },
     'checklists_mensais_1_6h': {
-        'task': 'backend.apps.nr12_checklist.tasks.gerar_checklists_mensais',
-        'schedule': crontab(hour=6, minute=0, day_of_month='1'),
+        'task': 'backend.apps.core.tasks.gerar_checklists_automatico',  # ✅ EXISTE
+        'schedule': crontab(hour=6, minute=0, day_of_month=1),
     },
 }
 # ================================================================
