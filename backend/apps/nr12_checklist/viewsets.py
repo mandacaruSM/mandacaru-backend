@@ -1,3 +1,4 @@
+#D:\projeto\mandacaru_erp\backend\apps\nr12_checklist\viewsets.py
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -269,7 +270,8 @@ class AlertaManutencaoViewSet(viewsets.ModelViewSet):
         return Response({'message': 'Alerta marcado como resolvido'})
     
 class ItemChecklistAtualizarView(APIView):
-    permission_classes = [AllowAny]  # Permitir para bot Telegram
+    serializer_class = ItemChecklistRealizadoSerializer
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:

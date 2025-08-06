@@ -94,14 +94,6 @@ class Operador(models.Model):
         null=True,
         verbose_name='QR Code do Operador'
     )
-    qr_code_data = models.CharField(
-        max_length=100, 
-        unique=True, 
-        editable=False,
-        blank=True,
-        null=True,
-        help_text='Dados únicos para identificação do QR Code'
-    )
 
     # Vínculos com sistema
     clientes_autorizados = models.ManyToManyField(
@@ -156,11 +148,7 @@ class Operador(models.Model):
         blank=True,
         help_text="Último acesso via bot Telegram"
     )
-    qr_code_data = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Dados do QR Code do operador"
-    )
+
     # Localização e uso
     localizacao_atual = models.CharField(max_length=200, blank=True)
     ultimo_equipamento_usado = models.ForeignKey(

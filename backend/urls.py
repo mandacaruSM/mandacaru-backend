@@ -1,8 +1,4 @@
 # backend/urls.py
-# ================================================================
-# CORREÇÃO CRÍTICA: backend/urls.py
-# Corrige imports para evitar ModuleNotFoundError e mantém funcionalidade
-# ================================================================
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -10,9 +6,9 @@ from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.routers import DefaultRouter
+
 from backend.apps.nr12_checklist.views import ItemChecklistAtualizarView
-# Import ViewSets para registro no router
-from backend.apps.nr12_checklist.views import (
+from backend.apps.nr12_checklist.viewsets import (
     ChecklistNR12ViewSet,
     ItemChecklistRealizadoViewSet
 )
@@ -23,9 +19,11 @@ router = DefaultRouter()
 router.register(r'nr12/checklists', ChecklistNR12ViewSet, basename='nr12-checklists')
 router.register(r'nr12/itemchecklistrealizado', ItemChecklistRealizadoViewSet, basename='itemchecklistrealizado')
 
+
 def health_check(request):
     """Endpoint de health check simples"""
     return JsonResponse({'status': 'ok', 'message': 'API funcionando'})
+
 
 @csrf_exempt
 def api_root(request):
@@ -57,6 +55,7 @@ def api_root(request):
             'documentacao': 'Use POST com JSON para todos os endpoints do bot'
         }
     })
+
 
 # URLs principais
 urlpatterns = [

@@ -97,7 +97,7 @@ class EquipamentoAcessoBotView(View):
             operador_codigo = request.GET.get('operador')
             if not operador_codigo:
                 return JsonResponse({
-                    'success': False, 
+                    'success': False,
                     'error': 'Código do operador é obrigatório'
                 }, status=400)
 
@@ -106,7 +106,7 @@ class EquipamentoAcessoBotView(View):
                 status='ATIVO',
                 ativo_bot=True
             ).first()
-            
+
             if not operador:
                 return JsonResponse({
                     'success': False,
@@ -115,10 +115,17 @@ class EquipamentoAcessoBotView(View):
 
             # Obter equipamento
             equipamento = get_object_or_404(
-                Equipamento, 
-                id=equipamento_id, 
+                Equipamento,
+                id=equipamento_id,
                 ativo_nr12=True
             )
+
+            # Verificar permissão de acesso ao equipamento
+            if not operador.pode_operar_equipamento(equipamento):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Operador não autorizado para este equipamento'
+                }, status=403)
 
             # Verificar checklists do dia
             hoje = timezone.now().date()
@@ -143,14 +150,14 @@ class EquipamentoAcessoBotView(View):
                 # Pode criar novo checklist
                 turnos_realizados = list(checklists_hoje.values_list('turno', flat=True))
                 turnos_disponiveis = []
-                
+
                 for turno_choice in ChecklistNR12.TURNO_CHOICES:
                     if turno_choice[0] not in turnos_realizados:
                         turnos_disponiveis.append({
                             'valor': turno_choice[0],
                             'texto': turno_choice[1]
                         })
-                
+
                 if turnos_disponiveis:
                     acoes.append({
                         'acao': 'criar_checklist',
@@ -169,7 +176,7 @@ class EquipamentoAcessoBotView(View):
                 'horimetro_atual': float(equipamento.horimetro_atual or 0),
                 'cliente': equipamento.cliente.razao_social if equipamento.cliente else None,
             }
-            
+
             checklists_info = []
             for c in checklists_hoje:
                 checklists_info.append({
