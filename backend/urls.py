@@ -1,18 +1,30 @@
+# backend/urls.py
 # ================================================================
 # CORREÇÃO CRÍTICA: backend/urls.py
-# Remove conflitos e duplicações, mantém funcionalidade
+# Corrige imports para evitar ModuleNotFoundError e mantém funcionalidade
 # ================================================================
-
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-import os
+from rest_framework.routers import DefaultRouter
+from backend.apps.nr12_checklist.views import ItemChecklistAtualizarView
+# Import ViewSets para registro no router
+from backend.apps.nr12_checklist.views import (
+    ChecklistNR12ViewSet,
+    ItemChecklistRealizadoViewSet
+)
+
+# Instancia router DRF
+router = DefaultRouter()
+# Registra principais endpoints NR12
+router.register(r'nr12/checklists', ChecklistNR12ViewSet, basename='nr12-checklists')
+router.register(r'nr12/itemchecklistrealizado', ItemChecklistRealizadoViewSet, basename='itemchecklistrealizado')
 
 def health_check(request):
-    """Endpoint de health check simples - função corrigida"""
+    """Endpoint de health check simples"""
     return JsonResponse({'status': 'ok', 'message': 'API funcionando'})
 
 @csrf_exempt
@@ -46,45 +58,25 @@ def api_root(request):
         }
     })
 
-def app_exists(app_path):
-    """Verifica se um app Django existe"""
-    try:
-        module_path = f"{app_path}.urls"
-        __import__(module_path)
-        return True
-    except ImportError:
-        return False
-
-# ================================================================
-# URL PATTERNS LIMPO - SEM DUPLICAÇÕES
-# ================================================================
-
+# URLs principais
 urlpatterns = [
-    # Admin
     path('admin/', admin.site.urls),
-    
-    # ================================================================
-    # APIs REST PRINCIPAIS (ordem importa!)
-    # ================================================================
+    # Endpoints REST via router
+    path('api/', include(router.urls)),
+    # APIs REST de apps específicos
     path('api/operadores/', include('backend.apps.operadores.api_urls')),
     path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
     path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
-    
-    # ================================================================
-    # ENDPOINTS ESPECIAIS
-    # ================================================================
+    # Health and root
     path('api/health/', health_check, name='health_check'),
     path('api/', api_root, name='api-root'),
-    
-    # ================================================================
     # VIEWS HTML (não APIs)
-    # ================================================================
     path('operadores/', include('backend.apps.operadores.urls')),
+    # Endpoint específico para atualização de item-checklist
+    path('api/nr12/bot/item-checklist/atualizar/', ItemChecklistAtualizarView.as_view(), name='item-checklist-atualizar'),
 ]
 
-# ================================================================
-# ADICIONAR APPS DINAMICAMENTE (sem conflitos)
-# ================================================================
+# Integração dinâmica de apps adicionais (sem duplicar)
 apps_urls = [
     ('api/auth/', 'backend.apps.authentication'),
     ('api/dashboard/', 'backend.apps.dashboard'),
@@ -100,18 +92,13 @@ apps_urls = [
     ('api/fornecedor/', 'backend.apps.fornecedor'),
 ]
 
-# Adicionar URLs de apps que existem (sem duplicar os já incluídos)
 for url_pattern, app_path in apps_urls:
-    if app_exists(app_path):
-        try:
-            urlpatterns.append(path(url_pattern, include(f'{app_path}.urls')))
-        except Exception as e:
-            # Log error but continue
-            print(f"Warning: Could not include {app_path}.urls - {e}")
+    try:
+        urlpatterns.append(path(url_pattern, include(f'{app_path}.urls')))
+    except ImportError:
+        # App não existe ou não tem urls
+        pass
 
-# ================================================================
-# ARQUIVOS ESTÁTICOS (sempre por último)
-# ================================================================
+# Servir arquivos estáticos em DEBUG
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

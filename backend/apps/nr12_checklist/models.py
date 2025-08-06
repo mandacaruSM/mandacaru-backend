@@ -27,6 +27,12 @@ class TipoEquipamentoNR12(models.Model):
         auto_now_add=True, 
         verbose_name="Criado em"
     )
+    categoria = models.CharField(
+        max_length=100,
+        blank=True,
+        default='Geral',
+        verbose_name="Categoria"
+    )
     
     class Meta:
         ordering = ['nome']
@@ -250,7 +256,7 @@ class ChecklistNR12(models.Model):
             itens_padrao = ItemChecklistPadrao.objects.filter(
                 tipo_equipamento=self.equipamento.tipo_nr12,
                 ativo=True
-            ).order_by('item_padrao__ordem')
+            ).order_by('ordem')
             
             for item_padrao in itens_padrao:
                 ItemChecklistRealizado.objects.get_or_create(

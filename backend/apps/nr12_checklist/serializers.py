@@ -33,6 +33,7 @@ class ItemChecklistRealizadoSerializer(serializers.ModelSerializer):
     item_padrao_nome = serializers.CharField(source='item_padrao.item', read_only=True)
     item_padrao_criticidade = serializers.CharField(source='item_padrao.criticidade', read_only=True)
     verificado_por_nome = serializers.CharField(source='verificado_por.first_name', read_only=True)
+    categoria = serializers.CharField(source='item_padrao.tipo_equipamento.categoria', read_only=True)  # Novo campo
     
     class Meta:
         model = ItemChecklistRealizado
