@@ -1,455 +1,202 @@
 # ===============================================
-# ARQUIVO LIMPO: mandacaru_bot/core/session.py
-# Sistema de sessões unificado e sem duplicações
+# ARQUIVO: mandacaru_bot/core/session.py
+# Gerenciamento de sessões do bot
 # ===============================================
 
 import logging
-from typing import Dict, Any, Optional, Union
-from enum import Enum
 from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 from .config import SESSION_TIMEOUT_HOURS
 
 logger = logging.getLogger(__name__)
 
 # ===============================================
-# ESTADOS E CONSTANTES
+# ARMAZENAMENTO EM MEMÓRIA
 # ===============================================
 
-class SessionState(Enum):
-    """Estados possíveis da sessão"""
-    AGUARDANDO_NOME = "AGUARDANDO_NOME"
-    AGUARDANDO_DATA_NASCIMENTO = "AGUARDANDO_DATA_NASCIMENTO"
-    AUTENTICADO = "AUTENTICADO"
-    CHECKLIST_ATIVO = "CHECKLIST_ATIVO"
-    ABASTECIMENTO_ATIVO = "ABASTECIMENTO_ATIVO"
-    OS_ATIVO = "OS_ATIVO"
-    AGUARDANDO_BROADCAST = "AGUARDANDO_BROADCAST"
-
-# Constantes para compatibilidade (strings)
-AGUARDANDO_NOME = "AGUARDANDO_NOME"
-AGUARDANDO_DATA_NASCIMENTO = "AGUARDANDO_DATA_NASCIMENTO"
-AUTENTICADO = "AUTENTICADO"
+# Armazenamento das sessões (em produção use Redis)
+_sessions: Dict[str, Dict[str, Any]] = {}
+_temp_data: Dict[str, Dict[str, Any]] = {}
 
 # ===============================================
-# ARMAZENAMENTO DE SESSÕES (EM MEMÓRIA)
+# GERENCIAMENTO DE SESSÕES
 # ===============================================
 
-# Dicionário principal de sessões
-_sessions: Dict[int, Dict[str, Any]] = {}
-
-# Alias para compatibilidade com código existente
-sessions = _sessions
-
-# ===============================================
-# FUNÇÕES PRINCIPAIS DE SESSÃO
-# ===============================================
-
-async def iniciar_sessao(user_id: Union[int, str], operador_data: Dict[str, Any], estado: str = 'AUTENTICADO') -> None:
-    """
-    Inicia uma nova sessão para o usuário
+def iniciar_sessao(chat_id: str) -> Dict[str, Any]:
+    """Inicia nova sessão para um chat_id"""
+    chat_id = str(chat_id)
     
-    Args:
-        user_id: ID do usuário (int ou str)
-        operador_data: Dados do operador
-        estado: Estado inicial da sessão
-    """
-    user_id = int(user_id)
-    
-    _sessions[user_id] = {
-        'estado': estado,
-        'operador': operador_data.copy(),
-        'operador_id': operador_data.get('id'),
-        'operador_nome': operador_data.get('nome'),
-        'ativo': True,
-        'criado_em': datetime.now(),
+    sessao = {
+        'chat_id': chat_id,
+        'criada_em': datetime.now(),
         'ultimo_acesso': datetime.now(),
-        'dados_temporarios': {},
-        'equipamento_atual': None
+        'operador_id': None,
+        'operador_nome': None,
+        'operador_codigo': None,
+        'autenticado': False,
+        'equipamento_atual': None,
+        'estado': 'inicio'
     }
     
-    logger.info(f"Sessão iniciada para usuário {user_id}: {operador_data.get('nome')}")
+    _sessions[chat_id] = sessao
+    logger.info(f"✅ Sessão iniciada para chat_id: {chat_id}")
+    return sessao
 
-async def obter_sessao(user_id: Union[int, str]) -> Optional[Dict[str, Any]]:
-    """
-    Obtém dados completos da sessão do usuário
-    
-    Args:
-        user_id: ID do usuário
-        
-    Returns:
-        Dados da sessão ou None se não existir
-    """
-    user_id = int(user_id)
-    sessao = _sessions.get(user_id)
+def obter_sessao(chat_id: str) -> Optional[Dict[str, Any]]:
+    """Obtém sessão existente"""
+    chat_id = str(chat_id)
+    sessao = _sessions.get(chat_id)
     
     if sessao:
+        # Verificar se não expirou
+        if _sessao_expirou(sessao):
+            limpar_sessao(chat_id)
+            return None
+        
         # Atualizar último acesso
         sessao['ultimo_acesso'] = datetime.now()
-        return sessao.copy()
     
-    return None
+    return sessao
 
-async def obter_operador_sessao(user_id: Union[int, str]) -> Optional[Dict[str, Any]]:
-    """
-    Obtém dados do operador autenticado
+def atualizar_sessao(chat_id: str, dados: Dict[str, Any]) -> None:
+    """Atualiza dados da sessão"""
+    chat_id = str(chat_id)
+    sessao = obter_sessao(chat_id)
     
-    Args:
-        user_id: ID do usuário
-        
-    Returns:
-        Dados do operador ou None se não autenticado
-    """
-    user_id = int(user_id)
-    sessao = _sessions.get(user_id)
+    if not sessao:
+        sessao = iniciar_sessao(chat_id)
     
-    if sessao and sessao.get('estado') == 'AUTENTICADO':
-        # Atualizar último acesso
-        sessao['ultimo_acesso'] = datetime.now()
-        return sessao.get('operador', {}).copy()
-    
-    return None
+    sessao.update(dados)
+    sessao['ultimo_acesso'] = datetime.now()
+    logger.debug(f"🔄 Sessão atualizada para {chat_id}: {list(dados.keys())}")
 
-async def atualizar_sessao(user_id: Union[int, str], dados_ou_chave: Union[Dict[str, Any], str], valor: Any = None) -> None:
-    """
-    Atualiza dados da sessão
+def limpar_sessao(chat_id: str) -> None:
+    """Remove sessão e dados temporários"""
+    chat_id = str(chat_id)
     
-    Args:
-        user_id: ID do usuário
-        dados_ou_chave: Dicionário com dados OU nome da chave
-        valor: Valor (se dados_ou_chave for string)
-    """
-    user_id = int(user_id)
+    if chat_id in _sessions:
+        del _sessions[chat_id]
     
-    # Criar sessão se não existir
-    if user_id not in _sessions:
-        _sessions[user_id] = {
-            'criado_em': datetime.now(),
-            'ultimo_acesso': datetime.now(),
-            'dados_temporarios': {},
-            'ativo': True
-        }
+    if chat_id in _temp_data:
+        del _temp_data[chat_id]
     
-    # Atualizar dados
-    if isinstance(dados_ou_chave, dict):
-        _sessions[user_id].update(dados_ou_chave)
-    else:
-        _sessions[user_id][dados_ou_chave] = valor
-    
-    # Sempre atualizar último acesso
-    _sessions[user_id]['ultimo_acesso'] = datetime.now()
-    
-    logger.debug(f"Sessão atualizada para usuário {user_id}")
+    logger.info(f"🧹 Sessão limpa para chat_id: {chat_id}")
 
-async def limpar_sessao(user_id: Union[int, str]) -> None:
-    """
-    Remove completamente uma sessão
-    
-    Args:
-        user_id: ID do usuário
-    """
-    user_id = int(user_id)
-    
-    if user_id in _sessions:
-        operador_nome = _sessions[user_id].get('operador', {}).get('nome', 'Desconhecido')
-        del _sessions[user_id]
-        logger.info(f"Sessão removida para {operador_nome} (ID: {user_id})")
+def _sessao_expirou(sessao: Dict[str, Any]) -> bool:
+    """Verifica se a sessão expirou"""
+    limite = datetime.now() - timedelta(hours=SESSION_TIMEOUT_HOURS)
+    return sessao['ultimo_acesso'] < limite
 
 # ===============================================
-# FUNÇÕES DE ESTADO DA SESSÃO
+# AUTENTICAÇÃO
 # ===============================================
 
-async def verificar_autenticacao(user_id: Union[int, str]) -> bool:
-    """
-    Verifica se o usuário está autenticado
-    
-    Args:
-        user_id: ID do usuário
-        
-    Returns:
-        True se autenticado
-    """
-    user_id = int(user_id)
-    sessao = _sessions.get(user_id)
-    return sessao is not None and sessao.get('estado') == 'AUTENTICADO'
+def autenticar_operador(chat_id: str, operador_data: Dict[str, Any]) -> None:
+    """Autentica operador na sessão"""
+    atualizar_sessao(chat_id, {
+        'operador_id': operador_data['id'],
+        'operador_nome': operador_data['nome'],
+        'operador_codigo': operador_data['codigo'],
+        'autenticado': True,
+        'estado': 'menu_principal'
+    })
+    logger.info(f"🔐 Operador {operador_data['codigo']} autenticado no chat {chat_id}")
 
-async def obter_estado_sessao(user_id: Union[int, str]) -> Optional[str]:
-    """
-    Obtém o estado atual da sessão
-    
-    Args:
-        user_id: ID do usuário
-        
-    Returns:
-        Estado da sessão ou None
-    """
-    user_id = int(user_id)
-    sessao = _sessions.get(user_id)
-    return sessao.get('estado') if sessao else None
+def verificar_autenticacao(chat_id: str) -> bool:
+    """Verifica se o usuário está autenticado"""
+    sessao = obter_sessao(chat_id)
+    return sessao is not None and sessao.get('autenticado', False)
 
-async def definir_estado_sessao(user_id: Union[int, str], estado: str) -> None:
-    """
-    Define o estado da sessão
+def obter_operador_sessao(chat_id: str) -> Optional[Dict[str, Any]]:
+    """Obtém dados do operador autenticado"""
+    sessao = obter_sessao(chat_id)
     
-    Args:
-        user_id: ID do usuário
-        estado: Novo estado
-    """
-    await atualizar_sessao(user_id, 'estado', estado)
-
-# ===============================================
-# DADOS TEMPORÁRIOS
-# ===============================================
-
-async def definir_dados_temporarios(user_id: Union[int, str], chave: str, valor: Any) -> None:
-    """
-    Define dados temporários na sessão
+    if not sessao or not sessao.get('autenticado'):
+        return None
     
-    Args:
-        user_id: ID do usuário
-        chave: Chave dos dados
-        valor: Valor a armazenar
-    """
-    user_id = int(user_id)
-    
-    if user_id not in _sessions:
-        await atualizar_sessao(user_id, {})
-    
-    if 'dados_temporarios' not in _sessions[user_id]:
-        _sessions[user_id]['dados_temporarios'] = {}
-    
-    _sessions[user_id]['dados_temporarios'][chave] = valor
-    _sessions[user_id]['ultimo_acesso'] = datetime.now()
-
-async def obter_dados_temporarios(user_id: Union[int, str], chave: str, padrao: Any = None) -> Any:
-    """
-    Obtém dados temporários da sessão
-    
-    Args:
-        user_id: ID do usuário
-        chave: Chave dos dados
-        padrao: Valor padrão se não encontrado
-        
-    Returns:
-        Valor armazenado ou padrão
-    """
-    user_id = int(user_id)
-    sessao = _sessions.get(user_id)
-    
-    if sessao and 'dados_temporarios' in sessao:
-        return sessao['dados_temporarios'].get(chave, padrao)
-    
-    return padrao
-
-async def limpar_dados_temporarios(user_id: Union[int, str], chave: Optional[str] = None) -> None:
-    """
-    Limpa dados temporários
-    
-    Args:
-        user_id: ID do usuário
-        chave: Chave específica ou None para limpar tudo
-    """
-    user_id = int(user_id)
-    sessao = _sessions.get(user_id)
-    
-    if sessao and 'dados_temporarios' in sessao:
-        if chave:
-            sessao['dados_temporarios'].pop(chave, None)
-        else:
-            sessao['dados_temporarios'] = {}
+    return {
+        'id': sessao['operador_id'],
+        'nome': sessao['operador_nome'],
+        'codigo': sessao['operador_codigo']
+    }
 
 # ===============================================
 # EQUIPAMENTO ATUAL
 # ===============================================
 
-async def definir_equipamento_atual(user_id: Union[int, str], equipamento_data: Dict[str, Any]) -> None:
-    """
-    Define o equipamento atual da sessão
-    
-    Args:
-        user_id: ID do usuário
-        equipamento_data: Dados do equipamento
-    """
-    await atualizar_sessao(user_id, 'equipamento_atual', equipamento_data.copy())
-    logger.info(f"Equipamento atual definido para usuário {user_id}: {equipamento_data.get('nome')}")
+def definir_equipamento_atual(chat_id: str, equipamento_data: Dict[str, Any]) -> None:
+    """Define equipamento atual na sessão"""
+    atualizar_sessao(chat_id, {
+        'equipamento_atual': equipamento_data,
+        'estado': 'menu_equipamento'
+    })
+    logger.info(f"🚜 Equipamento {equipamento_data.get('nome')} selecionado para {chat_id}")
 
-async def obter_equipamento_atual(user_id: Union[int, str]) -> Optional[Dict[str, Any]]:
-    """
-    Obtém o equipamento atual da sessão
-    
-    Args:
-        user_id: ID do usuário
-        
-    Returns:
-        Dados do equipamento ou None
-    """
-    user_id = int(user_id)
-    sessao = _sessions.get(user_id)
-    
-    if sessao:
-        sessao['ultimo_acesso'] = datetime.now()
-        return sessao.get('equipamento_atual')
-    
-    return None
-
-async def limpar_equipamento_atual(user_id: Union[int, str]) -> None:
-    """
-    Remove o equipamento atual da sessão
-    
-    Args:
-        user_id: ID do usuário
-    """
-    await atualizar_sessao(user_id, 'equipamento_atual', None)
+def obter_equipamento_atual(chat_id: str) -> Optional[Dict[str, Any]]:
+    """Obtém equipamento atual da sessão"""
+    sessao = obter_sessao(chat_id)
+    return sessao.get('equipamento_atual') if sessao else None
 
 # ===============================================
-# LIMPEZA E MANUTENÇÃO
+# DADOS TEMPORÁRIOS
 # ===============================================
 
-def limpar_sessoes_expiradas(timeout_hours: int = None) -> int:
-    """
-    Remove sessões expiradas (versão síncrona para compatibilidade)
+def definir_dados_temporarios(chat_id: str, chave: str, valor: Any) -> None:
+    """Armazena dados temporários"""
+    chat_id = str(chat_id)
     
-    Args:
-        timeout_hours: Horas para considerar expirada
-        
-    Returns:
-        Número de sessões removidas
-    """
-    if timeout_hours is None:
-        timeout_hours = SESSION_TIMEOUT_HOURS
+    if chat_id not in _temp_data:
+        _temp_data[chat_id] = {}
     
-    agora = datetime.now()
-    limite = timedelta(hours=timeout_hours)
-    sessoes_expiradas = []
-    
-    for user_id, sessao in _sessions.items():
-        ultimo_acesso = sessao.get('ultimo_acesso', sessao.get('criado_em', agora))
-        if agora - ultimo_acesso > limite:
-            sessoes_expiradas.append(user_id)
-    
-    for user_id in sessoes_expiradas:
-        operador_nome = _sessions[user_id].get('operador', {}).get('nome', 'Desconhecido')
-        del _sessions[user_id]
-        logger.info(f"Sessão expirada removida: {operador_nome} (ID: {user_id})")
-    
-    return len(sessoes_expiradas)
+    _temp_data[chat_id][chave] = valor
+    logger.debug(f"💾 Dados temporários salvos: {chat_id}.{chave}")
 
-async def limpar_sessoes_expiradas_async(timeout_hours: int = None) -> int:
-    """
-    Versão assíncrona de limpeza de sessões expiradas
+def obter_dados_temporarios(chat_id: str, chave: str, padrao: Any = None) -> Any:
+    """Obtém dados temporários"""
+    chat_id = str(chat_id)
+    return _temp_data.get(chat_id, {}).get(chave, padrao)
+
+def limpar_dados_temporarios(chat_id: str, chave: str = None) -> None:
+    """Limpa dados temporários"""
+    chat_id = str(chat_id)
     
-    Args:
-        timeout_hours: Horas para considerar expirada
-        
-    Returns:
-        Número de sessões removidas
-    """
-    return limpar_sessoes_expiradas(timeout_hours)
+    if chave:
+        if chat_id in _temp_data and chave in _temp_data[chat_id]:
+            del _temp_data[chat_id][chave]
+    else:
+        if chat_id in _temp_data:
+            del _temp_data[chat_id]
 
 # ===============================================
-# ESTATÍSTICAS E INFORMAÇÕES
+# LIMPEZA AUTOMÁTICA
 # ===============================================
 
-def listar_sessoes_ativas() -> int:
-    """
-    Retorna número de sessões ativas
+def limpar_sessoes_expiradas() -> int:
+    """Remove sessões expiradas"""
+    removidas = 0
+    chats_para_remover = []
     
-    Returns:
-        Quantidade de sessões ativas
-    """
-    return len(_sessions)
+    for chat_id, sessao in _sessions.items():
+        if _sessao_expirou(sessao):
+            chats_para_remover.append(chat_id)
+    
+    for chat_id in chats_para_remover:
+        limpar_sessao(chat_id)
+        removidas += 1
+    
+    if removidas > 0:
+        logger.info(f"🧹 {removidas} sessões expiradas removidas")
+    
+    return removidas
 
-def obter_estatisticas_sessoes() -> Dict[str, Any]:
-    """
-    Obtém estatísticas detalhadas das sessões
+def obter_estatisticas_sessoes() -> Dict[str, int]:
+    """Obtém estatísticas das sessões"""
+    total = len(_sessions)
+    autenticadas = sum(1 for s in _sessions.values() if s.get('autenticado', False))
     
-    Returns:
-        Dicionário com estatísticas
-    """
-    agora = datetime.now()
-    
-    estatisticas = {
-        'total_sessoes': len(_sessions),
-        'sessoes_autenticadas': 0,
-        'sessoes_aguardando_login': 0,
-        'sessoes_ativas_1h': 0,
-        'sessoes_ativas_24h': 0,
-        'usuarios_ativos': []
+    return {
+        'total': total,
+        'autenticadas': autenticadas,
+        'nao_autenticadas': total - autenticadas,
+        'dados_temporarios': len(_temp_data)
     }
-    
-    for user_id, sessao in _sessions.items():
-        estado = sessao.get('estado', '')
-        
-        if estado == 'AUTENTICADO':
-            estatisticas['sessoes_autenticadas'] += 1
-            operador = sessao.get('operador', {})
-            estatisticas['usuarios_ativos'].append({
-                'user_id': user_id,
-                'nome': operador.get('nome', 'N/A'),
-                'ultimo_acesso': sessao.get('ultimo_acesso')
-            })
-        elif estado in ['AGUARDANDO_NOME', 'AGUARDANDO_DATA_NASCIMENTO']:
-            estatisticas['sessoes_aguardando_login'] += 1
-        
-        ultimo_acesso = sessao.get('ultimo_acesso', sessao.get('criado_em', agora))
-        
-        if agora - ultimo_acesso <= timedelta(hours=1):
-            estatisticas['sessoes_ativas_1h'] += 1
-        
-        if agora - ultimo_acesso <= timedelta(hours=24):
-            estatisticas['sessoes_ativas_24h'] += 1
-    
-    return estatisticas
-
-# ===============================================
-# ALIASES PARA COMPATIBILIDADE
-# ===============================================
-
-# Funções com nomes alternativos para compatibilidade com código existente
-async def esta_autenticado(user_id: Union[int, str]) -> bool:
-    """Alias para verificar_autenticacao"""
-    return await verificar_autenticacao(user_id)
-
-async def obter_operador(user_id: Union[int, str]) -> Optional[Dict[str, Any]]:
-    """Alias para obter_operador_sessao"""
-    return await obter_operador_sessao(user_id)
-
-async def criar_sessao(user_id: Union[int, str], operador_data: Dict[str, Any], estado: str = 'AUTENTICADO') -> None:
-    """Alias para iniciar_sessao"""
-    await iniciar_sessao(user_id, operador_data, estado)
-
-async def iniciar_nova_sessao(user_id: Union[int, str], estado: str = 'AGUARDANDO_NOME') -> None:
-    """Inicia uma nova sessão vazia"""
-    await limpar_sessao(user_id)
-    await atualizar_sessao(user_id, {'estado': estado})
-
-def obter_sessoes_ativas() -> int:
-    """Alias para listar_sessoes_ativas"""
-    return listar_sessoes_ativas()
-
-async def limpar_sessao_usuario(user_id: Union[int, str]) -> None:
-    """Alias para limpar_sessao"""
-    await limpar_sessao(user_id)
-
-def get_session_count() -> int:
-    """Alias em inglês para listar_sessoes_ativas"""
-    return listar_sessoes_ativas()
-
-async def cleanup_expired_sessions(timeout_hours: int = None) -> int:
-    """Alias em inglês para limpar_sessoes_expiradas_async"""
-    return await limpar_sessoes_expiradas_async(timeout_hours)
-
-def get_session_stats() -> Dict[str, Any]:
-    """Alias em inglês para obter_estatisticas_sessoes"""
-    return obter_estatisticas_sessoes()
-
-# ===============================================
-# INICIALIZAÇÃO E CONFIGURAÇÃO
-# ===============================================
-
-def inicializar_sistema_sessoes() -> None:
-    """Inicializa o sistema de sessões"""
-    logger.info("Sistema de sessões inicializado")
-    logger.info(f"Timeout de sessão: {SESSION_TIMEOUT_HOURS} horas")
-
-# Chamar inicialização ao importar o módulo
-inicializar_sistema_sessoes()

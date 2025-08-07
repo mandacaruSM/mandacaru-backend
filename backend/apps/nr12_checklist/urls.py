@@ -1,4 +1,6 @@
-# backend/apps/nr12_checklist/urls.py
+# ===============================================
+# backend/apps/nr12_checklist/urls.py - COM VIEWS_BOT
+# ===============================================
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
@@ -10,15 +12,16 @@ from .viewsets import (
     ItemChecklistRealizadoViewSet,
     AlertaManutencaoViewSet,
 )
-from .bot_views.bot_api import (
-    checklist_por_uuid,
-    visualizar_checklist_html,
-)
-from .bot_views.bot_telegram import (
-    operador_login_qr,
-    EquipamentoAcessoBotView,
-    atualizar_item_checklist
-)
+
+# Tentar importar views_bot
+try:
+    from .views_bot import (
+        checklists_bot,
+        equipamentos_operador
+    )
+    BOT_VIEWS_AVAILABLE = True
+except ImportError:
+    BOT_VIEWS_AVAILABLE = False
 
 # Configura os routers das APIs REST
 router = DefaultRouter()
@@ -29,45 +32,30 @@ router.register(r'itens-checklist', ItemChecklistRealizadoViewSet, basename='ite
 router.register(r'alertas', AlertaManutencaoViewSet, basename='alertas-manutencao')
 
 urlpatterns = [
-    # ================================================================
-    # ENDPOINTS PARA BOT TELEGRAM
-    # ================================================================
-    
-    # Login de operador via QR code
-    path('bot/operador/login/', operador_login_qr, name='bot-operador-login'),
-    
-    # Acesso a equipamento via QR code
-    path('bot/equipamento/<int:equipamento_id>/', EquipamentoAcessoBotView.as_view(), name='bot-equipamento-acesso'),
-    
-    # Atualização de itens de checklist via bot
-    path('bot/item-checklist/atualizar/', atualizar_item_checklist, name='bot-atualizar-item'),
-    
-    # ================================================================
-    # ENDPOINTS WEB (Visualização)
-    # ================================================================
-    
-    # Acesso rápido via UUID (sem login) - para visualização web
-    path('checklist/<uuid:checklist_uuid>/', checklist_por_uuid, name='checklist-uuid'),
-
-    # Geração de PDF do checklist
-    path('checklist/<int:pk>/pdf/', visualizar_checklist_html, name='checklist-nr12-pdf'),
-
-    # ================================================================
-    # APIs REST (Autenticadas)
-    # ================================================================
-    
-    # APIs REST autenticadas
+    # APIs REST principais
     path('', include(router.urls)),
 ]
 
-# URL patterns disponíveis:
-# /api/nr12/bot/operador/login/ - POST - Login do operador
-# /api/nr12/bot/equipamento/{id}/ - GET/POST - Acesso ao equipamento
-# /api/nr12/bot/item-checklist/atualizar/ - POST - Atualizar item
-# /api/nr12/checklist/{uuid}/ - GET - Visualizar checklist por UUID
-# /api/nr12/checklist/{id}/pdf/ - GET - Gerar PDF do checklist
-# /api/nr12/tipos-equipamento/ - CRUD - Tipos de equipamento NR12
-# /api/nr12/itens-padrao/ - CRUD - Itens padrão de checklist
-# /api/nr12/checklists/ - CRUD - Checklists realizados
-# /api/nr12/itens-checklist/ - CRUD - Itens de checklist
-# /api/nr12/alertas/ - CRUD - Alertas de manutenção
+# Adicionar URLs do bot se views_bot existir
+if BOT_VIEWS_AVAILABLE:
+    urlpatterns += [
+        # Endpoints específicos para o bot
+        path('checklists/', checklists_bot, name='nr12-checklists-bot'),
+        path('operadores/<int:operador_id>/equipamentos/', equipamentos_operador, name='nr12-equipamentos-operador'),
+    ]
+
+# ================================================================
+# ENDPOINTS DISPONÍVEIS:
+# ================================================================
+# 
+# ViewSets (sempre disponíveis):
+# GET  /api/nr12/checklists/                     - Lista checklists (autenticado)
+# POST /api/nr12/checklists/                     - Cria checklist (autenticado)
+# GET  /api/nr12/checklists/{id}/                - Detalha checklist (autenticado)
+# POST /api/nr12/checklists/{id}/iniciar/        - Inicia checklist (autenticado)
+# POST /api/nr12/checklists/{id}/finalizar/      - Finaliza checklist (autenticado)
+# GET  /api/nr12/checklists/{id}/itens/          - Lista itens do checklist (autenticado)
+# 
+# Bot Views (se disponíveis):
+# GET  /api/nr12/checklists/                     - Lista checklists para bot (público)
+# GET  /api/nr12/operadores/{id}/equipamentos/   - Equipamentos do operador (público)

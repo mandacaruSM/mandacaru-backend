@@ -1,169 +1,167 @@
 # ===============================================
-# ARQUIVO FASE 2: mandacaru_bot/bot_main/main.py
-# Versão com módulos corrigidos
+# ARQUIVO: mandacaru_bot/bot_main/main.py
+# Loop principal do bot
 # ===============================================
 
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
-# Imports do core
-from core.config import TELEGRAM_TOKEN
+from core.config import TELEGRAM_TOKEN, DEBUG
 from core.session import limpar_sessoes_expiradas
+from .handlers import register_handlers
 
-# Imports dos handlers principais
-from bot_main.handlers import register_handlers as register_main_handlers
-
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
-# Criar instâncias do bot e dispatcher GLOBALMENTE
-bot = Bot(
-    token=TELEGRAM_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
-)
-dp = Dispatcher()
+# ===============================================
+# CONFIGURAÇÃO DO BOT
+# ===============================================
 
-async def register_all_handlers():
-    """Registra todos os handlers disponíveis"""
+async def create_bot() -> tuple[Bot, Dispatcher]:
+    """Cria instâncias do bot e dispatcher"""
+    
+    # Configurar bot com propriedades padrão
+    bot = Bot(
+        token=TELEGRAM_TOKEN,
+        default=DefaultBotProperties(
+            parse_mode=ParseMode.MARKDOWN
+        )
+    )
+    
+    # Criar dispatcher
+    dp = Dispatcher()
+    
+    # Registrar handlers
+    register_handlers(dp)
+    
+    # Registrar handlers de checklist
     try:
-        logger.info("📝 Registrando handlers...")
-        
-        # Handler principal (sempre necessário)
-        register_main_handlers(dp)
-        logger.info("✅ Handlers principais registrados")
-        
-        # Tentar carregar módulos específicos
-        modules_loaded = 0
-        
-        # Admin handlers
-        try:
-            from bot_main.admin_handlers import register_admin_handlers
-            register_admin_handlers(dp)
-            logger.info("✅ Handlers administrativos registrados")
-            modules_loaded += 1
-        except ImportError:
-            logger.info("⚠️ Admin handlers não encontrados")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao carregar admin handlers: {e}")
-        
-        # Checklist handlers (FASE 2)
-        try:
-            from bot_checklist.handlers import register_handlers as register_checklist_handlers
-            register_checklist_handlers(dp)
-            logger.info("✅ Handlers de checklist registrados")
-            modules_loaded += 1
-        except ImportError:
-            logger.info("⚠️ Checklist handlers não encontrados")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao carregar checklist handlers: {e}")
-        
-        # Abastecimento handlers
-        try:
-            from bot_abastecimento.handlers import register_handlers as register_abastecimento_handlers
-            register_abastecimento_handlers(dp)
-            logger.info("✅ Handlers de abastecimento registrados")
-            modules_loaded += 1
-        except ImportError:
-            logger.info("⚠️ Abastecimento handlers não encontrados")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao carregar abastecimento handlers: {e}")
-        
-        # OS handlers
-        try:
-            from bot_os.handlers import register_handlers as register_os_handlers
-            register_os_handlers(dp)
-            logger.info("✅ Handlers de OS registrados")
-            modules_loaded += 1
-        except ImportError:
-            logger.info("⚠️ OS handlers não encontrados")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao carregar OS handlers: {e}")
-        
-        # Financeiro handlers
-        try:
-            from bot_financeiro.handlers import register_handlers as register_financeiro_handlers
-            register_financeiro_handlers(dp)
-            logger.info("✅ Handlers financeiros registrados")
-            modules_loaded += 1
-        except ImportError:
-            logger.info("⚠️ Financeiro handlers não encontrados")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao carregar financeiro handlers: {e}")
-        
-        # QR Code handlers
-        try:
-            from bot_qrcode.handlers import register_handlers as register_qrcode_handlers
-            register_qrcode_handlers(dp)
-            logger.info("✅ Handlers de QR Code registrados")
-            modules_loaded += 1
-        except ImportError:
-            logger.info("⚠️ QR Code handlers não encontrados")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao carregar QR Code handlers: {e}")
-        
-        # Equipamento handlers
-        try:
-            from bot_equipamento.handlers import register_handlers as register_equipamento_handlers
-            register_equipamento_handlers(dp)
-            logger.info("✅ Handlers de equipamento registrados")
-            modules_loaded += 1
-        except ImportError:
-            logger.info("⚠️ Equipamento handlers não encontrados")
-        except Exception as e:
-            logger.warning(f"⚠️ Erro ao carregar equipamento handlers: {e}")
-        
-        logger.info(f"🎉 Handlers registrados: 1 principal + {modules_loaded} módulos específicos")
-        
+        from .handlers import register_checklist_handlers
+        register_checklist_handlers(dp)
     except Exception as e:
-        logger.error(f"❌ Erro ao registrar handlers: {e}")
-        raise
+        logger.warning(f"⚠️ Erro ao carregar módulo checklist: {e}")
+    
+    # Registrar handlers de QR Code
+    try:
+        from .handlers import register_qr_handlers
+        register_qr_handlers(dp)
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao carregar módulo QR: {e}")
+    
+    # Registrar handlers de relatórios
+    try:
+        from .handlers import register_reports_handlers
+        register_reports_handlers(dp)
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao carregar módulo relatórios: {e}")
+    
+    logger.info("✅ Bot e dispatcher configurados")
+    return bot, dp
+
+# ===============================================
+# TAREFAS EM BACKGROUND
+# ===============================================
 
 async def cleanup_task():
-    """Task de limpeza periódica"""
+    """Tarefa de limpeza que roda em background"""
     while True:
         try:
-            await asyncio.sleep(3600)  # Executar a cada hora
-            removed = limpar_sessoes_expiradas(24)
-            if removed > 0:
-                logger.info(f"🧹 Limpeza: {removed} sessões expiradas removidas")
+            # Limpar sessões expiradas a cada 30 minutos
+            await asyncio.sleep(1800)  # 30 minutos
+            
+            removidas = limpar_sessoes_expiradas()
+            if removidas > 0:
+                logger.info(f"🧹 Limpeza automática: {removidas} sessões removidas")
+                
         except Exception as e:
-            logger.error(f"Erro na limpeza: {e}")
+            logger.error(f"❌ Erro na tarefa de limpeza: {e}")
+            await asyncio.sleep(300)  # Tentar novamente em 5 minutos
 
-async def main():
-    """Função principal do bot"""
+# ===============================================
+# HANDLERS DE EVENTOS
+# ===============================================
+
+async def on_startup(bot: Bot):
+    """Executado quando o bot inicia"""
+    logger.info("🚀 Bot iniciado com sucesso!")
+    
+    # Obter informações do bot
     try:
-        logger.info("🤖 Iniciando Bot Telegram Mandacaru - FASE 2...")
-        
-        # Registrar handlers
-        await register_all_handlers()
-        
-        # Iniciar task de limpeza
-        cleanup_task_handle = asyncio.create_task(cleanup_task())
-        
-        # Iniciar bot
-        logger.info("🚀 Bot FASE 2 iniciado com sucesso!")
-        await dp.start_polling(bot)
+        bot_info = await bot.get_me()
+        logger.info(f"🤖 Bot: @{bot_info.username} ({bot_info.first_name})")
+        logger.info(f"🆔 ID: {bot_info.id}")
+    except Exception as e:
+        logger.warning(f"⚠️ Não foi possível obter informações do bot: {e}")
+    
+    # Iniciar tarefa de limpeza
+    asyncio.create_task(cleanup_task())
+    logger.info("✅ Tarefa de limpeza iniciada")
+
+async def on_shutdown(bot: Bot):
+    """Executado quando o bot é encerrado"""
+    logger.info("🛑 Encerrando bot...")
+    
+    # Fechar sessão do bot
+    await bot.session.close()
+    logger.info("✅ Sessão do bot fechada")
+
+# ===============================================
+# FUNÇÃO PRINCIPAL DE EXECUÇÃO
+# ===============================================
+
+async def run_bot():
+    """Executa o bot principal"""
+    logger.info("🔄 Configurando bot...")
+    
+    # Criar bot e dispatcher
+    bot, dp = await create_bot()
+    
+    # Configurar eventos de startup e shutdown
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
+    
+    try:
+        # Iniciar polling
+        logger.info("📡 Iniciando polling...")
+        await dp.start_polling(
+            bot,
+            allowed_updates=['message', 'callback_query'],
+            drop_pending_updates=True
+        )
         
     except Exception as e:
-        logger.error(f"❌ Erro crítico: {e}")
+        logger.error(f"❌ Erro no polling: {e}")
         raise
     finally:
-        # Limpeza
+        # Garantir que o bot seja fechado
         await bot.session.close()
-        logger.info("🛑 Bot finalizado")
+        logger.info("👋 Bot encerrado")
 
-if __name__ == "__main__":
+# ===============================================
+# FUNÇÃO DE TESTE
+# ===============================================
+
+async def test_bot_connection():
+    """Testa a conexão com o bot do Telegram"""
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("🛑 Bot interrompido pelo usuário")
+        bot = Bot(token=TELEGRAM_TOKEN)
+        bot_info = await bot.get_me()
+        await bot.session.close()
+        
+        logger.info(f"✅ Conexão testada: @{bot_info.username}")
+        return True
+        
     except Exception as e:
-        logger.error(f"❌ Erro fatal: {e}")
-        exit(1)
+        logger.error(f"❌ Erro na conexão: {e}")
+        return False
+
+# ===============================================
+# MODO DEBUG
+# ===============================================
+
+if DEBUG:
+    # Configurar logging mais detalhado em modo debug
+    logging.getLogger('aiogram').setLevel(logging.INFO)
+    logger.info("🔧 Modo DEBUG ativado")

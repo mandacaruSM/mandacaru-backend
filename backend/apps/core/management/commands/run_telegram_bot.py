@@ -1,62 +1,48 @@
-# =============================
-# 6. COMANDO MANAGEMENT CORRIGIDO
-# backend/apps/core/management/commands/run_telegram_bot.py
-# =============================
+# ===============================================
+# ARQUIVO: backend/apps/core/management/commands/run_telegram_bot.py
+# Comando Django para executar o bot
+# ===============================================
 
 import os
 import sys
+import asyncio
 from django.core.management.base import BaseCommand
 from django.conf import settings
+from pathlib import Path
 
 class Command(BaseCommand):
-    help = 'Executa o bot do Telegram'
-
+    help = 'Executa o Bot Telegram do Mandacaru'
+    
     def add_arguments(self, parser):
         parser.add_argument(
             '--debug',
             action='store_true',
-            help='Executa em modo debug com logs detalhados',
+            help='Executa o bot em modo debug',
         )
-
+    
     def handle(self, *args, **options):
-        # Caminho correto para o bot na raiz do projeto
-        bot_path = os.path.join(settings.BASE_DIR, 'mandacaru_bot')
+        """Executa o bot Telegram"""
         
-        self.stdout.write(f'Procurando bot em: {bot_path}')
+        # Encontrar diretório do bot
+        project_root = Path(settings.BASE_DIR)
+        bot_path = project_root / 'mandacaru_bot'
         
-        if not os.path.exists(bot_path):
+        if not bot_path.exists():
             self.stdout.write(
-                self.style.ERROR(f'Pasta do bot não encontrada em: {bot_path}')
-            )
-            
-            # Sugerir localizações alternativas
-            alternative_paths = [
-                os.path.join(settings.BASE_DIR, 'backend', 'mandacaru_bot'),
-                os.path.join(settings.BASE_DIR, '..', 'mandacaru_bot'),
-            ]
-            
-            self.stdout.write("Tentando localizações alternativas:")
-            for alt_path in alternative_paths:
-                if os.path.exists(alt_path):
-                    self.stdout.write(f"✅ Encontrado em: {alt_path}")
-                    bot_path = alt_path
-                    break
-            else:
-                self.stdout.write(
-                    self.style.WARNING(
-                        "❌ Bot não encontrado em nenhuma localização. "
-                        "Verifique se a pasta mandacaru_bot está na raiz do projeto."
-                    )
+                self.style.ERROR(
+                    f'❌ Diretório do bot não encontrado: {bot_path}\n'
+                    "Verifique se a pasta mandacaru_bot está na raiz do projeto."
                 )
-                return
+            )
+            return
         
         # Adicionar ao Python path
-        if bot_path not in sys.path:
-            sys.path.insert(0, bot_path)
+        if str(bot_path) not in sys.path:
+            sys.path.insert(0, str(bot_path))
         
         # Configurar variáveis de ambiente
         if not os.environ.get('DJANGO_SETTINGS_MODULE'):
-            os.environ['DJANGO_SETTINGS_MODULE'] = 'backend.settings'
+            os.environ['DJANGO_SETTINGS_MODULE'] = settings.SETTINGS_MODULE if hasattr(settings, 'SETTINGS_MODULE') else 'backend.settings'
         
         # Definir modo debug
         if options['debug']:
@@ -69,18 +55,17 @@ class Command(BaseCommand):
             self.stdout.write(f'📁 Diretório do bot: {bot_path}')
             
             # Verificar se arquivo start.py existe
-            start_file = os.path.join(bot_path, 'start.py')
-            if not os.path.exists(start_file):
+            start_file = bot_path / 'start.py'
+            if not start_file.exists():
                 self.stdout.write(
                     self.style.ERROR(f'❌ Arquivo start.py não encontrado em: {start_file}')
                 )
                 return
             
-            # Importar função main
+            # Importar função main do start.py
             from start import main
             
             # Executar o bot
-            import asyncio
             asyncio.run(main())
             
         except ImportError as e:

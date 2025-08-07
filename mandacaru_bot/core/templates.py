@@ -1,178 +1,271 @@
 # ===============================================
 # ARQUIVO: mandacaru_bot/core/templates.py
-# Templates de mensagens padronizadas
-# SALVAR COMO: mandacaru_bot/core/templates.py
+# Templates de mensagens do bot
 # ===============================================
 
-from typing import Dict, Any
 from datetime import datetime
-from .utils import Formatters
+from typing import Dict, Any, List
 
 class MessageTemplates:
-    """Templates de mensagens padronizadas"""
+    """Templates padronizados para mensagens do bot"""
+    
+    # ===============================================
+    # TEMPLATES DE BOAS-VINDAS E INÍCIO
+    # ===============================================
     
     @staticmethod
-    def welcome_template() -> str:
-        """Template de boas-vindas"""
-        return """🤖 **Bem-vindo ao Bot Mandacaru!**
+    def welcome_message() -> str:
+        return """🤖 **Mandacaru Bot**
 
-🏢 Sistema de gestão empresarial integrado
+Seja bem-vindo ao sistema de automação da Mandacaru!
 
-🎯 **Funcionalidades disponíveis:**
-• 📋 Checklist NR12
-• ⛽ Controle de abastecimento  
-• 🔧 Ordens de serviço
-• 📱 Acesso via QR Code
-• 💰 Relatórios financeiros
+Para começar, preciso validar sua identidade.
 
-🔐 **Para começar, vamos fazer seu login...**"""
+📝 **Digite seu nome completo:**"""
     
     @staticmethod
-    def login_success_template(operador: Dict[str, Any]) -> str:
-        """Template de login bem-sucedido"""
-        return f"""✅ **Login realizado com sucesso!**
+    def auth_birth_date_request() -> str:
+        return """🎂 **Validação de Segurança**
 
-👤 **Operador:** {operador.get('nome', 'N/A')}
-💼 **Função:** {operador.get('funcao', 'N/A')}
-📅 **Data:** {datetime.now().strftime('%d/%m/%Y')}
-🕐 **Horário:** {datetime.now().strftime('%H:%M')}
+Para confirmar sua identidade, digite sua data de nascimento:
 
-🎯 **Escolha uma opção no menu abaixo:**"""
+📅 **Formato:** DD/MM/AAAA
+📝 **Exemplo:** 15/03/1990"""
     
     @staticmethod
-    def error_template(titulo: str, descricao: str) -> str:
-        """Template de erro"""
-        return f"""❌ **{titulo}**
+    def auth_success(operador_nome: str) -> str:
+        return f"""✅ **Autenticação Realizada**
 
-{descricao}
+Bem-vindo, **{operador_nome}**!
 
-🔄 Tente novamente ou entre em contato com o suporte se o problema persistir."""
+Você agora tem acesso a todas as funcionalidades do sistema."""
     
     @staticmethod
-    def success_template(titulo: str, descricao: str) -> str:
-        """Template de sucesso"""
-        return f"""✅ **{titulo}**
+    def auth_failed() -> str:
+        return """❌ **Falha na Autenticação**
 
-{descricao}
+Os dados informados não conferem ou você não tem permissão para usar o bot.
 
-📅 **Registrado em:** {datetime.now().strftime('%d/%m/%Y às %H:%M')}"""
+🔄 Digite /start para tentar novamente."""
     
     @staticmethod
-    def equipamento_info_template(equipamento: Dict[str, Any]) -> str:
-        """Template de informações do equipamento"""
-        nome = equipamento.get('nome', 'N/A')
-        status = Formatters.formatar_status(equipamento.get('status_operacional', 'N/A'))
-        horimetro = Formatters.formatar_horimetro(equipamento.get('horimetro_atual', 0))
-        modelo = equipamento.get('modelo', 'N/A')
+    def operator_not_found() -> str:
+        return """⚠️ **Operador Não Encontrado**
+
+Não foi possível localizar um operador com esse nome.
+
+📝 Verifique se digitou o nome corretamente
+🔄 Digite /start para tentar novamente"""
+    
+    # ===============================================
+    # TEMPLATES DE MENU
+    # ===============================================
+    
+    @staticmethod
+    def main_menu(operador_nome: str) -> str:
+        return f"""🏠 **Menu Principal**
+
+Olá, **{operador_nome}**!
+
+Escolha uma das opções abaixo:"""
+    
+    @staticmethod
+    def equipment_menu(equipamento_nome: str) -> str:
+        return f"""🚜 **Equipamento Selecionado**
+
+**{equipamento_nome}**
+
+Selecione a ação desejada:"""
+    
+    # ===============================================
+    # TEMPLATES DE CHECKLIST
+    # ===============================================
+    
+    @staticmethod
+    def checklist_list_header() -> str:
+        return """📋 **Checklists Disponíveis**
+
+Selecione um checklist para executar:"""
+    
+    @staticmethod
+    def checklist_item_question(item_num: int, total: int, item_text: str) -> str:
+        return f"""📋 **Checklist - Item {item_num}/{total}**
+
+**{item_text}**
+
+Como está este item?"""
+    
+    @staticmethod
+    def checklist_completed(equipamento: str, total_items: int, aprovados: int) -> str:
+        status_emoji = "✅" if aprovados == total_items else "⚠️"
         
-        return f"""🚜 **{nome}**
+        return f"""{status_emoji} **Checklist Finalizado**
 
-📊 **Status:** {status}
-⏱️ **Horímetro:** {horimetro}
-🏷️ **Modelo:** {modelo}
-🆔 **ID:** {equipamento.get('id', 'N/A')}"""
+**Equipamento:** {equipamento}
+**Total de itens:** {total_items}
+**Aprovados:** {aprovados}
+**Reprovados:** {total_items - aprovados}
+
+O checklist foi salvo no sistema."""
     
     @staticmethod
-    def abastecimento_template(abastecimento: Dict[str, Any]) -> str:
-        """Template de abastecimento"""
-        quantidade = abastecimento.get('quantidade_litros', 0)
-        valor = abastecimento.get('valor_total', 0)
-        preco_litro = valor / quantidade if quantidade > 0 else 0
-        
-        return f"""⛽ **Abastecimento Registrado**
+    def checklist_observation_request() -> str:
+        return """📝 **Observação Adicional**
 
-📊 **Quantidade:** {quantidade:.1f} litros
-💰 **Valor Total:** {Formatters.formatar_moeda(valor)}
-💲 **Preço/Litro:** {Formatters.formatar_moeda(preco_litro)}
-🚜 **Equipamento:** {abastecimento.get('equipamento_nome', 'N/A')}
-👤 **Operador:** {abastecimento.get('operador_nome', 'N/A')}"""
+Deseja adicionar alguma observação sobre este item?
+
+💡 Digite a observação ou clique em "Pular" para continuar."""
+    
+    # ===============================================
+    # TEMPLATES DE ERRO E STATUS
+    # ===============================================
     
     @staticmethod
-    def ordem_servico_template(os: Dict[str, Any]) -> str:
-        """Template de ordem de serviço"""
-        return f"""🔧 **Ordem de Serviço #{os.get('id', 'N/A')}**
+    def error_generic() -> str:
+        return """❌ **Erro Interno**
 
-📊 **Status:** {Formatters.formatar_status(os.get('status', 'ABERTA'))}
-🔧 **Tipo:** {os.get('tipo_problema', 'N/A')}
-📝 **Descrição:** {os.get('descricao', 'N/A')}
-🚜 **Equipamento:** {os.get('equipamento_nome', 'N/A')}
-👤 **Solicitante:** {os.get('operador_nome', 'N/A')}"""
+Ocorreu um erro no sistema. Tente novamente em alguns instantes.
+
+Se o problema persistir, contate o administrador."""
     
     @staticmethod
-    def lista_vazia_template(tipo: str) -> str:
-        """Template para listas vazias"""
-        emoji_map = {
-            'checklists': '📋',
-            'equipamentos': '🚜',
-            'abastecimentos': '⛽',
-            'ordens_servico': '🔧'
-        }
-        
-        emoji = emoji_map.get(tipo, '📄')
-        
-        return f"""{emoji} **Nenhum item encontrado**
+    def error_api_connection() -> str:
+        return """🔌 **Erro de Conexão**
 
-Não há {tipo} disponíveis no momento.
+Não foi possível conectar com o servidor.
 
-🔄 Tente novamente mais tarde ou verifique os filtros aplicados."""
+Verifique sua conexão e tente novamente."""
     
     @staticmethod
-    def ajuda_template() -> str:
-        """Template de ajuda"""
+    def unauthorized_access() -> str:
+        return """🚫 **Acesso Não Autorizado**
+
+Você precisa fazer login primeiro.
+
+Digite /start para começar."""
+    
+    @staticmethod
+    def feature_under_development() -> str:
+        return """🚧 **Funcionalidade em Desenvolvimento**
+
+Esta funcionalidade ainda está sendo desenvolvida.
+
+Em breve estará disponível!"""
+    
+    # ===============================================
+    # TEMPLATES DE SUCESSO
+    # ===============================================
+    
+    @staticmethod
+    def success_template(title: str, message: str) -> str:
+        return f"""✅ **{title}**
+
+{message}"""
+    
+    @staticmethod
+    def info_template(title: str, message: str) -> str:
+        return f"""ℹ️ **{title}**
+
+{message}"""
+    
+    @staticmethod
+    def warning_template(title: str, message: str) -> str:
+        return f"""⚠️ **{title}**
+
+{message}"""
+    
+    # ===============================================
+    # TEMPLATES ADMINISTRATIVOS
+    # ===============================================
+    
+    @staticmethod
+    def admin_menu() -> str:
+        return """⚙️ **Menu Administrativo**
+
+Funcionalidades de administração:"""
+    
+    @staticmethod
+    def system_status(stats: Dict[str, Any]) -> str:
+        return f"""📊 **Status do Sistema**
+
+**Sessões Ativas:** {stats.get('total_sessions', 0)}
+**Usuários Autenticados:** {stats.get('authenticated_users', 0)}
+**API Status:** {"✅ Online" if stats.get('api_status') else "❌ Offline"}
+**Última Atualização:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"""
+    
+    # ===============================================
+    # TEMPLATES DE HELP
+    # ===============================================
+    
+    @staticmethod
+    def help_message() -> str:
         return """❓ **Central de Ajuda**
 
-🤖 **Como usar o bot:**
-1. Faça login com /start
-2. Use os botões do menu
-3. Escaneie QR codes dos equipamentos
+**Comandos Disponíveis:**
+• `/start` - Iniciar/Reiniciar bot
+• `/menu` - Voltar ao menu principal
+• `/help` - Mostrar esta ajuda
 
-📱 **Comandos disponíveis:**
-• /start - Fazer login
-• /admin - Painel administrativo (apenas admins)
+**Como usar:**
+1. Faça login com seu nome e data de nascimento
+2. Escaneie o QR Code do equipamento
+3. Execute os checklists necessários
 
-🎯 **Principais funcionalidades:**
-• 📋 Checklist NR12 obrigatório
-• ⛽ Registro de abastecimentos
-• 🔧 Abertura de ordens de serviço
-• 📊 Consulta de relatórios
-
-📱 **QR Codes:**
-Cada equipamento possui um QR code único. Ao escaneá-lo, você acessa diretamente as funções específicas daquele equipamento.
-
-🆘 **Precisa de ajuda?**
-Entre em contato com o suporte técnico:
-📞 (11) 99999-9999
-📧 suporte@mandacaru.com"""
-
-class AdminTemplates:
-    """Templates específicos para administradores"""
+**Suporte:**
+Em caso de dúvidas, contate o administrador do sistema."""
+    
+    # ===============================================
+    # FORMATADORES ESPECÍFICOS
+    # ===============================================
     
     @staticmethod
-    def painel_admin_template(stats: Dict[str, Any]) -> str:
-        """Template do painel administrativo"""
-        return f"""🔑 **Painel Administrativo**
-
-📊 **Estatísticas do Sistema:**
-👥 Usuários ativos: {stats.get('usuarios_ativos', 0)}
-📋 Checklists hoje: {stats.get('checklists_hoje', 0)}
-⛽ Abastecimentos hoje: {stats.get('abastecimentos_hoje', 0)}
-🔧 OS abertas: {stats.get('os_abertas', 0)}
-
-🕐 **Última atualização:** {datetime.now().strftime('%H:%M')}"""
+    def format_equipment_list(equipamentos: List[Dict[str, Any]]) -> str:
+        """Formata lista de equipamentos"""
+        if not equipamentos:
+            return "Nenhum equipamento disponível."
+        
+        texto = "🚜 **Equipamentos Disponíveis:**\n\n"
+        
+        for i, eq in enumerate(equipamentos[:10], 1):
+            nome = eq.get('nome', 'Sem nome')
+            status = eq.get('status_operacional', 'N/A')
+            horimetro = eq.get('horimetro_atual', 0)
+            
+            texto += f"{i}. **{nome}**\n"
+            texto += f"   Status: {status}\n"
+            texto += f"   Horímetro: {horimetro}h\n\n"
+        
+        return texto
     
     @staticmethod
-    def broadcast_template() -> str:
-        """Template para broadcast"""
-        return """📢 **Enviar Mensagem em Massa**
+    def format_checklist_summary(checklist: Dict[str, Any]) -> str:
+        """Formata resumo do checklist"""
+        equipamento = checklist.get('equipamento_nome', 'N/A')
+        data = checklist.get('data_checklist', 'N/A')
+        status = checklist.get('status', 'N/A')
+        
+        return f"""📋 **Resumo do Checklist**
 
-Digite a mensagem que deseja enviar para todos os usuários ativos do sistema.
-
-⚠️ **Atenção:** A mensagem será enviada imediatamente para todos os operadores logados.
-
-✏️ **Digite sua mensagem:**"""
-
-# Exportar classes principais
-__all__ = [
-    'MessageTemplates',
-    'AdminTemplates'
-]
+**Equipamento:** {equipamento}
+**Data:** {data}
+**Status:** {status}"""
+    
+    @staticmethod
+    def format_time_ago(timestamp_str: str) -> str:
+        """Formata tempo relativo"""
+        try:
+            from datetime import datetime
+            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            now = datetime.now(timestamp.tzinfo)
+            diff = now - timestamp
+            
+            if diff.days > 0:
+                return f"{diff.days} dia(s) atrás"
+            elif diff.seconds > 3600:
+                return f"{diff.seconds // 3600} hora(s) atrás"
+            elif diff.seconds > 60:
+                return f"{diff.seconds // 60} minuto(s) atrás"
+            else:
+                return "Agora há pouco"
+        except:
+            return "N/A"

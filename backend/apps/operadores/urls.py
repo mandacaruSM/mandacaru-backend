@@ -1,13 +1,14 @@
-# backend/apps/operadores/urls.py
-from django.urls import path
-from . import views
+# ===============================================
+# backend/apps/operadores/urls_bot.py
+# URLs específicas para Bot Telegram
+# ===============================================
 
-app_name = 'operadores'
+from django.urls import path
+from . import views_bot
 
 urlpatterns = [
-    path('', views.OperadorListView.as_view(), name='lista'),
-    path('<int:pk>/', views.OperadorDetailView.as_view(), name='detalhe'),
-    path('<int:operador_id>/gerar-qr/', views.gerar_qr_code_operador, name='gerar_qr'),
-    path('<int:operador_id>/download-qr/', views.download_qr_code, name='download_qr'),
-    path('api/verificar-qr/', views.verificar_operador_qr, name='verificar_qr'),
+    path('por-chat-id/', views_bot.operador_por_chat_id, name='operador-por-chat-id'),
+    path('busca/', views_bot.operadores_busca, name='operadores-busca'),
+    path('validar-login/', views_bot.validar_operador_login, name='validar-operador-login'),
+    path('<int:operador_id>/', views_bot.atualizar_operador, name='atualizar-operador'),
 ]

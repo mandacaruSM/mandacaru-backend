@@ -1,145 +1,111 @@
-# ================================
-# core/config.py (versão final corrigida)
-# ================================
+# ===============================================
+# ARQUIVO: mandacaru_bot/core/config.py
+# Configuração centralizada do bot
+# ===============================================
 
 import os
-from dotenv import load_dotenv
+import logging
 from pathlib import Path
+from dotenv import load_dotenv
 
-# Carrega variáveis do .env
-env_path = Path(__file__).parent.parent.parent / ".env"
-if not env_path.exists():
-    # Tenta encontrar .env em locais alternativos
-    alternative_paths = [
-        Path(__file__).parent.parent / ".env",
-        Path(".env"),
-        Path(__file__).parent.parent.parent.parent / ".env"
-    ]
-    
-    for alt_path in alternative_paths:
-        if alt_path.exists():
-            env_path = alt_path
-            break
-    else:
-        base_path = Path(__file__).parent.parent.parent / ".env"
-        print(f"⚠️ Arquivo .env não encontrado. Tentou em:")
-        print(f"   • {base_path}")
-        for path in alternative_paths:
-            print(f"   • {path}")
-        print("\n📝 Copie .env.example para .env e configure as variáveis.")
+# Carregar variáveis do .env
+load_dotenv()
 
-load_dotenv(dotenv_path=env_path)
+# ===============================================
+# CONFIGURAÇÕES PRINCIPAIS
+# ===============================================
 
-# Configurações do Telegram - usando as variáveis existentes do Django
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# Bot Telegram
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 if not TELEGRAM_TOKEN:
-    raise ValueError("⚠️ TELEGRAM_BOT_TOKEN não encontrado no arquivo .env")
+    raise ValueError("❌ TELEGRAM_BOT_TOKEN não configurado no arquivo .env")
 
-# Configurações da API - baseado no BASE_URL do Django
-BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
-API_BASE_URL = os.getenv("API_BASE_URL", f"{BASE_URL}/api")
-API_TIMEOUT = int(os.getenv("API_TIMEOUT", "10"))
+# API Django
+API_BASE_URL = os.getenv('API_BASE_URL', 'http://127.0.0.1:8000/api')
+API_TIMEOUT = int(os.getenv('API_TIMEOUT', '30'))
 
-# Configurações do banco de dados (reutilizando do Django)
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Administradores
+ADMIN_IDS = [
+    int(x.strip()) for x in os.getenv('ADMIN_IDS', '').split(',') 
+    if x.strip().isdigit()
+]
 
-# Configurações de logging do bot
-LOG_LEVEL = os.getenv("BOT_LOG_LEVEL", os.getenv("LOG_LEVEL", "INFO"))
-LOG_FILE = os.getenv("BOT_LOG_FILE", "bot.log")  # Apenas o nome do arquivo
+# ===============================================
+# CONFIGURAÇÕES DE SESSÃO
+# ===============================================
 
-# Configurações de sessão
-SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "24"))
-CLEANUP_INTERVAL_MINUTES = int(os.getenv("CLEANUP_INTERVAL_MINUTES", "60"))
+SESSION_TIMEOUT_HOURS = int(os.getenv('SESSION_TIMEOUT_HOURS', '24'))
+CLEANUP_INTERVAL_MINUTES = int(os.getenv('CLEANUP_INTERVAL_MINUTES', '60'))
 
-# Configurações de paginação
-ITEMS_PER_PAGE = int(os.getenv("ITEMS_PER_PAGE", "10"))
-MAX_ITEMS_PER_PAGE = int(os.getenv("MAX_ITEMS_PER_PAGE", "50"))
+# ===============================================
+# CONFIGURAÇÕES DE INTERFACE
+# ===============================================
 
-# Configurações de segurança
-MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "3"))
-LOGIN_TIMEOUT_MINUTES = int(os.getenv("LOGIN_TIMEOUT_MINUTES", "15"))
+ITEMS_PER_PAGE = int(os.getenv('ITEMS_PER_PAGE', '10'))
+MAX_MESSAGE_LENGTH = 4000
 
-# IDs de administradores (separados por vírgula)
-ADMIN_IDS_STR = os.getenv("ADMIN_IDS", "")
-ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip().isdigit()]
+# ===============================================
+# CONFIGURAÇÕES DE LOGGING
+# ===============================================
 
-# Configurações de desenvolvimento - usando variáveis do Django
-DEBUG = os.getenv("BOT_DEBUG", os.getenv("DEBUG", "False")).lower() in ("true", "1", "yes")
-ENVIRONMENT = os.getenv("BOT_ENVIRONMENT", os.getenv("ENVIRONMENT", "development"))
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
+LOG_MAX_SIZE = int(os.getenv('LOG_MAX_SIZE', '10485760'))  # 10MB
+LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', '3'))
 
-# Webhook para produção
-WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL", os.getenv("TELEGRAM_WEBHOOK_URL"))
+# ===============================================
+# CONFIGURAÇÕES DE DESENVOLVIMENTO
+# ===============================================
 
-# Configurações específicas do Mandacaru
-EMPRESA_NOME = os.getenv("EMPRESA_NOME", "Mandacaru ERP")
-EMPRESA_TELEFONE = os.getenv("EMPRESA_TELEFONE", "(11) 99999-9999")
+DEBUG = os.getenv('BOT_DEBUG', 'False').lower() == 'true'
 
-# Configurações NR12
-NR12_TEMPO_LIMITE_CHECKLIST = int(os.getenv("NR12_TEMPO_LIMITE_CHECKLIST", "120"))
-NR12_FREQUENCIA_PADRAO = os.getenv("NR12_FREQUENCIA_PADRAO", "DIARIO")
-NR12_NOTIFICAR_ATRASOS = os.getenv("NR12_NOTIFICAR_ATRASOS", "True").lower() in ("true", "1", "yes")
+# ===============================================
+# VALIDAÇÃO DE CONFIGURAÇÃO
+# ===============================================
 
-# Validações
-def validar_configuracoes():
-    """Valida se todas as configurações necessárias estão presentes"""
+def validar_configuracao():
+    """Valida se todas as configurações obrigatórias estão presentes"""
     erros = []
     
     if not TELEGRAM_TOKEN:
-        erros.append("TELEGRAM_BOT_TOKEN é obrigatório")
+        erros.append("TELEGRAM_BOT_TOKEN não configurado")
     
     if not API_BASE_URL:
-        erros.append("API_BASE_URL é obrigatório")
+        erros.append("API_BASE_URL não configurado")
     
-    if API_TIMEOUT <= 0:
-        erros.append("API_TIMEOUT deve ser maior que 0")
-    
-    if SESSION_TIMEOUT_HOURS <= 0:
-        erros.append("SESSION_TIMEOUT_HOURS deve ser maior que 0")
+    if not ADMIN_IDS:
+        erros.append("ADMIN_IDS não configurado")
     
     if erros:
-        raise ValueError(f"Erros de configuração: {', '.join(erros)}")
+        raise ValueError(f"❌ Configuração inválida:\n" + "\n".join(f"  • {erro}" for erro in erros))
+    
+    return True
 
-# Executar validação na importação
+# ===============================================
+# CONFIGURAÇÃO DE PATHS
+# ===============================================
+
+# Diretório base do bot
+BOT_DIR = Path(__file__).parent.parent
+PROJECT_ROOT = BOT_DIR.parent
+
+# Diretórios de trabalho
+LOGS_DIR = BOT_DIR / "logs"
+TEMP_DIR = BOT_DIR / "temp"
+
+# Criar diretórios se não existirem
+LOGS_DIR.mkdir(exist_ok=True)
+TEMP_DIR.mkdir(exist_ok=True)
+
+# ===============================================
+# VALIDAR CONFIGURAÇÃO NO IMPORT
+# ===============================================
+
 try:
-    validar_configuracoes()
-except ValueError as e:
-    print(f"❌ {e}")
-    print("📝 Configure o arquivo .env antes de continuar.")
-
-# Configurações por ambiente
-class Config:
-    """Classe base de configuração"""
-    TELEGRAM_TOKEN = TELEGRAM_TOKEN
-    API_BASE_URL = API_BASE_URL
-    API_TIMEOUT = API_TIMEOUT
-    DEBUG = DEBUG
-    EMPRESA_NOME = EMPRESA_NOME
-    EMPRESA_TELEFONE = EMPRESA_TELEFONE
-
-class DevelopmentConfig(Config):
-    """Configurações para desenvolvimento"""
-    DEBUG = True
-    LOG_LEVEL = "DEBUG"
-
-class ProductionConfig(Config):
-    """Configurações para produção"""
-    DEBUG = False
-    LOG_LEVEL = "INFO"
-
-# Selecionar configuração baseada no ambiente
-if ENVIRONMENT.lower() == "production":
-    config = ProductionConfig()
-else:
-    config = DevelopmentConfig()
-
-# Exportar configuração ativa
-__all__ = [
-    "TELEGRAM_TOKEN", "API_BASE_URL", "API_TIMEOUT",
-    "SESSION_TIMEOUT_HOURS", "CLEANUP_INTERVAL_MINUTES",
-    "ITEMS_PER_PAGE", "MAX_ITEMS_PER_PAGE",
-    "MAX_LOGIN_ATTEMPTS", "LOGIN_TIMEOUT_MINUTES",
-    "ADMIN_IDS", "DEBUG", "LOG_LEVEL", "LOG_FILE",
-    "EMPRESA_NOME", "EMPRESA_TELEFONE",
-    "NR12_TEMPO_LIMITE_CHECKLIST", "NR12_FREQUENCIA_PADRAO", "NR12_NOTIFICAR_ATRASOS",
-    "config"
-]
+    validar_configuracao()
+    if DEBUG:
+        logging.basicConfig(level=logging.DEBUG)
+        print("🔧 Configuração do bot carregada em modo DEBUG")
+except Exception as e:
+    print(f"❌ Erro na configuração: {e}")
+    raise

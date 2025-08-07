@@ -1,305 +1,377 @@
 # ===============================================
 # ARQUIVO: mandacaru_bot/core/utils.py
-# Utilitários e validadores
-# SALVAR COMO: mandacaru_bot/core/utils.py
+# Funções utilitárias do bot
 # ===============================================
 
 import re
 import logging
 from datetime import datetime, date
-from typing import Optional, Any, Dict, List
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from typing import List, Dict, Any, Optional
+from .config import ADMIN_IDS, MAX_MESSAGE_LENGTH
 
 logger = logging.getLogger(__name__)
 
+# ===============================================
+# VALIDADORES
+# ===============================================
+
 class Validators:
-    """Classe com validadores de dados"""
+    """Classe com validadores diversos"""
+    
+    @staticmethod
+    def validar_data(data_str: str) -> Optional[date]:
+        """Valida e converte string de data no formato DD/MM/AAAA"""
+        try:
+            return datetime.strptime(data_str.strip(), '%d/%m/%Y').date()
+        except ValueError:
+            return None
     
     @staticmethod
     def validar_nome(nome: str) -> bool:
-        """
-        Valida nome do operador
-        
-        Args:
-            nome: Nome a ser validado
-            
-        Returns:
-            True se válido
-        """
-        if not nome or not isinstance(nome, str):
+        """Valida se o nome tem formato válido"""
+        if not nome or len(nome.strip()) < 3:
             return False
         
-        nome = nome.strip()
-        return len(nome) >= 3 and not any(char.isdigit() for char in nome)
+        # Verificar se contém pelo menos duas palavras
+        palavras = nome.strip().split()
+        return len(palavras) >= 2
     
     @staticmethod
-    def validar_data_nascimento(data_texto: str) -> Optional[date]:
-        """
-        Valida e converte data de nascimento
-        
-        Args:
-            data_texto: Data em texto (DD/MM/AAAA)
-            
-        Returns:
-            Objeto date se válido, None se inválido
-        """
+    def validar_horimetro(valor: str) -> Optional[float]:
+        """Valida e converte valor de horímetro"""
         try:
-            # Tentar formato DD/MM/AAAA
-            data = datetime.strptime(data_texto.strip(), '%d/%m/%Y').date()
-            
-            # Validar se não é futura
-            if data > date.today():
-                return None
-            
-            # Validar idade razoável (entre 16 e 100 anos)
-            idade = (date.today() - data).days // 365
-            if idade < 16 or idade > 100:
-                return None
-            
-            return data
-            
-        except ValueError:
+            valor_limpo = valor.replace(',', '.').strip()
+            horimetro = float(valor_limpo)
+            return horimetro if horimetro >= 0 else None
+        except (ValueError, TypeError):
             return None
     
     @staticmethod
-    def validar_valor_monetario(valor_texto: str) -> Optional[float]:
-        """
-        Valida valor monetário
-        
-        Args:
-            valor_texto: Valor em texto
-            
-        Returns:
-            Float se válido, None se inválido
-        """
+    def validar_quantidade(valor: str) -> Optional[float]:
+        """Valida e converte quantidade (combustível, etc.)"""
         try:
-            valor = float(valor_texto.replace(',', '.'))
-            return valor if valor > 0 else None
-        except ValueError:
-            return None
-    
-    @staticmethod
-    def validar_quantidade(quantidade_texto: str) -> Optional[float]:
-        """
-        Valida quantidade (litros, etc)
-        
-        Args:
-            quantidade_texto: Quantidade em texto
-            
-        Returns:
-            Float se válido, None se inválido
-        """
-        try:
-            quantidade = float(quantidade_texto.replace(',', '.'))
+            valor_limpo = valor.replace(',', '.').strip()
+            quantidade = float(valor_limpo)
             return quantidade if quantidade > 0 else None
-        except ValueError:
+        except (ValueError, TypeError):
             return None
     
     @staticmethod
-    def validar_horimetro(horimetro_texto: str) -> Optional[float]:
-        """
-        Valida horímetro
-        
-        Args:
-            horimetro_texto: Horímetro em texto
-            
-        Returns:
-            Float se válido, None se inválido
-        """
-        try:
-            horimetro = float(horimetro_texto.replace(',', '.'))
-            # Horímetro deve ser positivo e razoável (máximo 100.000h)
-            return horimetro if 0 <= horimetro <= 100000 else None
-        except ValueError:
-            return None
-    
-    @staticmethod
-    def validar_uuid(uuid_texto: str) -> bool:
-        """
-        Valida formato UUID
-        
-        Args:
-            uuid_texto: UUID em texto
-            
-        Returns:
-            True se válido
-        """
-        pattern = r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'
-        return bool(re.match(pattern, uuid_texto.lower()))
+    def is_admin(user_id: int) -> bool:
+        """Verifica se o usuário é administrador"""
+        return user_id in ADMIN_IDS
+
+# ===============================================
+# FORMATADORES
+# ===============================================
 
 class Formatters:
-    """Classe com formatadores de dados"""
-    
-    @staticmethod
-    def formatar_moeda(valor: float) -> str:
-        """
-        Formata valor monetário
-        
-        Args:
-            valor: Valor numérico
-            
-        Returns:
-            Valor formatado (R$ 1.234,56)
-        """
-        return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    """Classe com formatadores diversos"""
     
     @staticmethod
     def formatar_data(data: date) -> str:
-        """
-        Formata data para exibição
-        
-        Args:
-            data: Objeto date
-            
-        Returns:
-            Data formatada (DD/MM/AAAA)
-        """
+        """Formata data para exibição (DD/MM/AAAA)"""
         return data.strftime('%d/%m/%Y')
     
     @staticmethod
-    def formatar_datetime(dt: datetime) -> str:
-        """
-        Formata datetime para exibição
-        
-        Args:
-            dt: Objeto datetime
-            
-        Returns:
-            Datetime formatado (DD/MM/AAAA HH:MM)
-        """
-        return dt.strftime('%d/%m/%Y %H:%M')
+    def formatar_data_hora(data_hora: datetime) -> str:
+        """Formata data e hora para exibição"""
+        return data_hora.strftime('%d/%m/%Y %H:%M')
     
     @staticmethod
-    def formatar_horimetro(horas: float) -> str:
-        """
-        Formata horímetro
-        
-        Args:
-            horas: Horas numéricas
-            
-        Returns:
-            Horímetro formatado (1.234,5h)
-        """
-        return f"{horas:,.1f}h".replace(',', 'X').replace('.', ',').replace('X', '.')
+    def formatar_horimetro(horimetro: float) -> str:
+        """Formata horímetro para exibição"""
+        return f"{horimetro:,.1f}h".replace(',', '.')
     
     @staticmethod
-    def formatar_status(status: str) -> str:
-        """
-        Formata status para exibição
-        
-        Args:
-            status: Status em texto
-            
-        Returns:
-            Status formatado com emoji
-        """
-        status_map = {
-            'DISPONIVEL': '✅ Disponível',
-            'EM_USO': '🔄 Em Uso',
-            'MANUTENCAO': '🔧 Manutenção',
-            'INATIVO': '❌ Inativo',
-            'PENDENTE': '⏳ Pendente',
-            'CONCLUIDO': '✅ Concluído',
-            'CANCELADO': '❌ Cancelado',
-            'ABERTA': '🔓 Aberta',
-            'FECHADA': '🔒 Fechada'
-        }
-        return status_map.get(status.upper(), status)
-
-class KeyboardBuilder:
-    """Classe para construir teclados inline"""
+    def formatar_quantidade(quantidade: float, unidade: str = "L") -> str:
+        """Formata quantidade com unidade"""
+        return f"{quantidade:,.1f} {unidade}".replace(',', '.')
     
     @staticmethod
-    def confirmar_cancelar() -> InlineKeyboardMarkup:
-        """Cria teclado de confirmação"""
-        keyboard = [
-            [
-                InlineKeyboardButton(text="✅ Confirmar", callback_data="confirmar"),
-                InlineKeyboardButton(text="❌ Cancelar", callback_data="cancelar")
-            ]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    def formatar_valor_monetario(valor: float) -> str:
+        """Formata valor monetário"""
+        return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     
     @staticmethod
-    def sim_nao() -> InlineKeyboardMarkup:
-        """Cria teclado sim/não"""
-        keyboard = [
-            [
-                InlineKeyboardButton(text="✅ Sim", callback_data="sim"),
-                InlineKeyboardButton(text="❌ Não", callback_data="nao")
-            ]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=keyboard)
-    
-    @staticmethod
-    def voltar_menu() -> InlineKeyboardMarkup:
-        """Cria botão para voltar ao menu"""
-        keyboard = [
-            [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_principal")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-class MessageUtils:
-    """Utilitários para mensagens"""
-    
-    @staticmethod
-    def truncar_texto(texto: str, max_length: int = 4000) -> str:
-        """
-        Trunca texto para não exceder limite do Telegram
-        
-        Args:
-            texto: Texto a truncar
-            max_length: Comprimento máximo
-            
-        Returns:
-            Texto truncado
-        """
+    def truncar_texto(texto: str, max_length: int = MAX_MESSAGE_LENGTH) -> str:
+        """Trunca texto se necessário"""
         if len(texto) <= max_length:
             return texto
-        
-        return texto[:max_length - 3] + "..."
+        return texto[:max_length-3] + "..."
     
     @staticmethod
-    def escapar_markdown(texto: str) -> str:
-        """
-        Escapa caracteres especiais do Markdown
+    def capitalizar_nome(nome: str) -> str:
+        """Capitaliza nome próprio corretamente"""
+        palavras_menores = ['da', 'de', 'do', 'das', 'dos', 'e', 'em', 'na', 'no']
+        palavras = nome.lower().split()
         
-        Args:
-            texto: Texto a escapar
-            
-        Returns:
-            Texto escapado
-        """
-        caracteres_especiais = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-        for char in caracteres_especiais:
-            texto = texto.replace(char, f'\\{char}')
+        resultado = []
+        for i, palavra in enumerate(palavras):
+            if i == 0 or palavra not in palavras_menores:
+                resultado.append(palavra.capitalize())
+            else:
+                resultado.append(palavra)
+        
+        return ' '.join(resultado)
+
+# ===============================================
+# PROCESSADORES DE TEXTO
+# ===============================================
+
+class TextProcessors:
+    """Processadores de texto e mensagens"""
+    
+    @staticmethod
+    def extrair_uuid_qr(texto: str) -> Optional[str]:
+        """Extrai UUID de QR code do texto"""
+        # Procurar por padrão UUID
+        padrao_uuid = r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'
+        match = re.search(padrao_uuid, texto.lower())
+        return match.group(0) if match else None
+    
+    @staticmethod
+    def limpar_texto(texto: str) -> str:
+        """Remove caracteres especiais e normaliza texto"""
+        # Remove quebras de linha excessivas
+        texto = re.sub(r'\n\s*\n', '\n\n', texto)
+        
+        # Remove espaços no início e fim
+        texto = texto.strip()
+        
         return texto
     
     @staticmethod
-    def criar_lista_numerada(itens: List[str], max_itens: int = 10) -> str:
-        """
-        Cria lista numerada
+    def extrair_comando_start(texto: str) -> Optional[str]:
+        """Extrai parâmetro do comando /start"""
+        match = re.match(r'/start\s+(.+)', texto.strip())
+        return match.group(1).strip() if match else None
+    
+    @staticmethod
+    def dividir_mensagem_longa(texto: str, max_length: int = MAX_MESSAGE_LENGTH) -> List[str]:
+        """Divide mensagem longa em partes menores"""
+        if len(texto) <= max_length:
+            return [texto]
         
-        Args:
-            itens: Lista de itens
-            max_itens: Máximo de itens a mostrar
+        partes = []
+        linhas = texto.split('\n')
+        parte_atual = ""
+        
+        for linha in linhas:
+            # Se a linha sozinha já é maior que o limite
+            if len(linha) > max_length:
+                # Adicionar parte atual se não estiver vazia
+                if parte_atual:
+                    partes.append(parte_atual.strip())
+                    parte_atual = ""
+                
+                # Dividir a linha grande em pedaços menores
+                for i in range(0, len(linha), max_length - 10):
+                    partes.append(linha[i:i + max_length - 10])
+                continue
             
-        Returns:
-            Lista formatada
-        """
-        resultado = []
-        for i, item in enumerate(itens[:max_itens], 1):
-            resultado.append(f"{i}. {item}")
+            # Se adicionar esta linha ultrapassar o limite
+            if len(parte_atual) + len(linha) + 1 > max_length:
+                partes.append(parte_atual.strip())
+                parte_atual = linha
+            else:
+                if parte_atual:
+                    parte_atual += '\n' + linha
+                else:
+                    parte_atual = linha
         
-        if len(itens) > max_itens:
-            resultado.append(f"... e mais {len(itens) - max_itens} itens")
+        # Adicionar última parte
+        if parte_atual:
+            partes.append(parte_atual.strip())
         
-        return "\n".join(resultado)
+        return partes
 
-# Exportar classes principais
-__all__ = [
-    'Validators',
-    'Formatters', 
-    'KeyboardBuilder',
-    'MessageUtils'
-]
+# ===============================================
+# GERADOR DE KEYBOARDS
+# ===============================================
+
+class KeyboardBuilder:
+    """Construtor de teclados inline para o Telegram"""
+    
+    @staticmethod
+    def criar_keyboard_lista(
+        items: List[Dict[str, Any]], 
+        prefix: str, 
+        key_field: str = 'id',
+        label_field: str = 'nome',
+        cols: int = 1
+    ) -> List[List[Dict[str, str]]]:
+        """Cria keyboard para lista de itens"""
+        keyboard = []
+        
+        for i, item in enumerate(items):
+            if i % cols == 0:
+                keyboard.append([])
+            
+            callback_data = f"{prefix}_{item[key_field]}"
+            text = item[label_field]
+            
+            keyboard[-1].append({
+                'text': text,
+                'callback_data': callback_data
+            })
+        
+        return keyboard
+    
+    @staticmethod
+    def criar_keyboard_confirmacao(prefix: str = "confirm") -> List[List[Dict[str, str]]]:
+        """Cria keyboard de confirmação Sim/Não"""
+        return [
+            [
+                {'text': '✅ Sim', 'callback_data': f'{prefix}_yes'},
+                {'text': '❌ Não', 'callback_data': f'{prefix}_no'}
+            ]
+        ]
+    
+    @staticmethod
+    def criar_keyboard_checklist() -> List[List[Dict[str, str]]]:
+        """Cria keyboard para respostas de checklist"""
+        return [
+            [
+                {'text': '✅ Aprovado', 'callback_data': 'checklist_approved'},
+                {'text': '❌ Reprovado', 'callback_data': 'checklist_rejected'}
+            ],
+            [
+                {'text': '📝 Observação', 'callback_data': 'checklist_observation'}
+            ]
+        ]
+    
+    @staticmethod
+    def criar_keyboard_navegacao(
+        has_prev: bool = False, 
+        has_next: bool = False,
+        show_menu: bool = True
+    ) -> List[List[Dict[str, str]]]:
+        """Cria keyboard de navegação"""
+        keyboard = []
+        
+        # Linha de navegação anterior/próximo
+        if has_prev or has_next:
+            nav_row = []
+            if has_prev:
+                nav_row.append({'text': '◀️ Anterior', 'callback_data': 'nav_prev'})
+            if has_next:
+                nav_row.append({'text': '▶️ Próximo', 'callback_data': 'nav_next'})
+            keyboard.append(nav_row)
+        
+        # Linha do menu
+        if show_menu:
+            keyboard.append([{'text': '🏠 Menu Principal', 'callback_data': 'main_menu'}])
+        
+        return keyboard
+
+# ===============================================
+# UTILITÁRIOS DE SISTEMA
+# ===============================================
+
+class SystemUtils:
+    """Utilitários do sistema"""
+    
+    @staticmethod
+    def get_memory_usage() -> Dict[str, Any]:
+        """Obtém uso de memória do sistema"""
+        try:
+            import psutil
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            
+            return {
+                'rss_mb': round(memory_info.rss / 1024 / 1024, 2),
+                'vms_mb': round(memory_info.vms / 1024 / 1024, 2),
+                'percent': round(process.memory_percent(), 2)
+            }
+        except ImportError:
+            return {'error': 'psutil não instalado'}
+        except Exception as e:
+            return {'error': str(e)}
+    
+    @staticmethod
+    def get_system_info() -> Dict[str, Any]:
+        """Obtém informações do sistema"""
+        try:
+            import psutil
+            import platform
+            
+            return {
+                'platform': platform.system(),
+                'python_version': platform.python_version(),
+                'cpu_percent': psutil.cpu_percent(interval=1),
+                'memory_percent': psutil.virtual_memory().percent,
+                'disk_percent': psutil.disk_usage('/').percent if platform.system() != 'Windows' else 0
+            }
+        except ImportError:
+            return {'error': 'psutil não disponível'}
+        except Exception as e:
+            return {'error': str(e)}
+    
+    @staticmethod
+    def log_user_action(user_id: int, action: str, details: str = None):
+        """Registra ação do usuário nos logs"""
+        log_msg = f"👤 User {user_id} - {action}"
+        if details:
+            log_msg += f" - {details}"
+        
+        logger.info(log_msg)
+
+# ===============================================
+# CACHE SIMPLES EM MEMÓRIA
+# ===============================================
+
+class SimpleCache:
+    """Cache simples em memória para dados temporários"""
+    
+    _cache: Dict[str, Dict[str, Any]] = {}
+    
+    @classmethod
+    def set(cls, key: str, value: Any, ttl_minutes: int = 30):
+        """Armazena valor no cache"""
+        expiry = datetime.now().timestamp() + (ttl_minutes * 60)
+        cls._cache[key] = {
+            'value': value,
+            'expiry': expiry
+        }
+    
+    @classmethod
+    def get(cls, key: str) -> Optional[Any]:
+        """Obtém valor do cache"""
+        if key not in cls._cache:
+            return None
+        
+        cached = cls._cache[key]
+        
+        # Verificar se expirou
+        if datetime.now().timestamp() > cached['expiry']:
+            del cls._cache[key]
+            return None
+        
+        return cached['value']
+    
+    @classmethod
+    def delete(cls, key: str):
+        """Remove item do cache"""
+        if key in cls._cache:
+            del cls._cache[key]
+    
+    @classmethod
+    def clear(cls):
+        """Limpa todo o cache"""
+        cls._cache.clear()
+    
+    @classmethod
+    def cleanup_expired(cls) -> int:
+        """Remove itens expirados e retorna quantos foram removidos"""
+        now = datetime.now().timestamp()
+        expired_keys = [
+            key for key, data in cls._cache.items() 
+            if now > data['expiry']
+        ]
+        
+        for key in expired_keys:
+            del cls._cache[key]
+        
+        return len(expired_keys)

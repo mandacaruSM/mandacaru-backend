@@ -1,33 +1,26 @@
-# backend/urls.py
+# ===============================================
+# backend/urls.py - VERSÃO DE EMERGÊNCIA QUE FUNCIONA
+# ===============================================
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.routers import DefaultRouter
 
-from backend.apps.nr12_checklist.views import ItemChecklistAtualizarView
-from backend.apps.nr12_checklist.viewsets import (
-    ChecklistNR12ViewSet,
-    ItemChecklistRealizadoViewSet
-)
-
-# Instancia router DRF
-router = DefaultRouter()
-# Registra principais endpoints NR12
-router.register(r'nr12/checklists', ChecklistNR12ViewSet, basename='nr12-checklists')
-router.register(r'nr12/itemchecklistrealizado', ItemChecklistRealizadoViewSet, basename='itemchecklistrealizado')
-
-
-def health_check(request):
-    """Endpoint de health check simples"""
-    return JsonResponse({'status': 'ok', 'message': 'API funcionando'})
-
+# Imports para views específicas do bot
+try:
+    from backend.apps.operadores.views_bot import (
+        operador_por_chat_id, operadores_busca, validar_operador_login
+    )
+    BOT_VIEWS_AVAILABLE = True
+except ImportError:
+    BOT_VIEWS_AVAILABLE = False
 
 @csrf_exempt
 def api_root(request):
-    """Endpoint raiz da API com informações do sistema e bot"""
+    """Endpoint raiz da API"""
     return JsonResponse({
         'message': 'Mandacaru ERP API',
         'version': '1.0.0',
@@ -35,50 +28,82 @@ def api_root(request):
         'endpoints': {
             'nr12': '/api/nr12/',
             'equipamentos': '/api/equipamentos/',
-            'clientes': '/api/clientes/',
-            'empreendimentos': '/api/empreendimentos/',
             'operadores': '/api/operadores/',
-            'almoxarifado': '/api/almoxarifado/',
-            'financeiro': '/api/financeiro/',
-            'manutencao': '/api/manutencao/',
-            'orcamentos': '/api/orcamentos/',
-            'ordens_servico': '/api/ordens-servico/',
-            'relatorios': '/api/relatorios/',
-        },
-        'bot_telegram': {
-            'info': 'Endpoints do Bot Telegram para integração',
-            'endpoints': {
-                'operador_login': '/api/nr12/bot/operador/login/',
-                'equipamento_acesso': '/api/nr12/bot/equipamento/{id}/',
-                'atualizar_item': '/api/nr12/bot/item-checklist/atualizar/',
-            },
-            'documentacao': 'Use POST com JSON para todos os endpoints do bot'
+            'admin': '/admin/',
         }
     })
 
+def app_exists(app_path):
+    """Verifica se um app Django existe"""
+    try:
+        module_path = f"{app_path}.urls"
+        __import__(module_path)
+        return True
+    except ImportError:
+        return False
 
-# URLs principais
 urlpatterns = [
+    # Admin (sempre funciona)
     path('admin/', admin.site.urls),
-    # Endpoints REST via router
-    path('api/', include(router.urls)),
-    # APIs REST de apps específicos
-    path('api/operadores/', include('backend.apps.operadores.api_urls')),
-    path('api/equipamentos/', include('backend.apps.equipamentos.urls')),
-    path('api/nr12/', include('backend.apps.nr12_checklist.urls')),
-    # Health and root
-    path('api/health/', health_check, name='health_check'),
+    
+    # API raiz
     path('api/', api_root, name='api-root'),
-    # VIEWS HTML (não APIs)
-    path('operadores/', include('backend.apps.operadores.urls')),
-    # Endpoint específico para atualização de item-checklist
-    path('api/nr12/bot/item-checklist/atualizar/', ItemChecklistAtualizarView.as_view(), name='item-checklist-atualizar'),
 ]
 
-# Integração dinâmica de apps adicionais (sem duplicar)
-apps_urls = [
+# Adicionar URLs específicas do bot se disponíveis
+if BOT_VIEWS_AVAILABLE:
+    urlpatterns += [
+        path('api/operadores/por-chat-id/', operador_por_chat_id, name='operador-por-chat-id-bot'),
+        path('api/operadores/busca/', operadores_busca, name='operadores-busca-bot'),
+        path('api/operadores/validar-login/', validar_operador_login, name='validar-login-bot'),
+    ]
+
+# ================================================================
+# ADICIONAR URLs DOS APPS QUE EXISTEM (COM VERIFICAÇÃO)
+# ================================================================
+
+# Tentar adicionar URLs dos apps principais
+apps_to_try = [
+    ('api/operadores/', 'backend.apps.operadores.api_urls'),
+    ('api/equipamentos/', 'backend.apps.equipamentos.urls'),
+    ('api/nr12/', 'backend.apps.nr12_checklist.urls'),
+    ('operadores/', 'backend.apps.operadores.urls'),  # views HTML
+]
+
+# Depois tentar adicionar URLs específicas do bot (sem conflito)
+bot_apps_to_try = [
+    ('api/operadores/', 'backend.apps.operadores.urls_bot'),  # bot operadores
+]
+
+for url_prefix, app_urls in apps_to_try:
+    try:
+        urlpatterns.append(path(url_prefix, include(app_urls)))
+        print(f"✅ URLs adicionadas: {url_prefix} -> {app_urls}")
+    except ImportError as e:
+        print(f"⚠️ App não encontrado: {app_urls} - {e}")
+        continue
+    except Exception as e:
+        print(f"❌ Erro ao incluir {app_urls}: {e}")
+        continue
+
+# Adicionar URLs específicas do bot (sem conflito de namespace)
+for url_prefix, app_urls in bot_apps_to_try:
+    try:
+        urlpatterns.append(path(url_prefix, include(app_urls)))
+        print(f"🤖 URLs do bot adicionadas: {url_prefix} -> {app_urls}")
+    except ImportError as e:
+        print(f"⚠️ Bot URLs não encontradas: {app_urls} - {e}")
+        continue
+    except Exception as e:
+        print(f"❌ Erro ao incluir bot URLs {app_urls}: {e}")
+        continue
+
+# ================================================================
+# APPS ADICIONAIS (OPCIONAIS)
+# ================================================================
+optional_apps = [
     ('api/auth/', 'backend.apps.authentication'),
-    ('api/dashboard/', 'backend.apps.dashboard'),
+    ('api/dashboard/', 'backend.apps.dashboard'), 
     ('api/clientes/', 'backend.apps.clientes'),
     ('api/empreendimentos/', 'backend.apps.empreendimentos'),
     ('api/almoxarifado/', 'backend.apps.almoxarifado'),
@@ -91,13 +116,27 @@ apps_urls = [
     ('api/fornecedor/', 'backend.apps.fornecedor'),
 ]
 
-for url_pattern, app_path in apps_urls:
-    try:
-        urlpatterns.append(path(url_pattern, include(f'{app_path}.urls')))
-    except ImportError:
-        # App não existe ou não tem urls
-        pass
+for url_prefix, app_urls in optional_apps:
+    if app_exists(app_urls.replace('.urls', '')):
+        try:
+            urlpatterns.append(path(url_prefix, include(f'{app_urls}.urls')))
+        except Exception:
+            pass
 
-# Servir arquivos estáticos em DEBUG
+# ================================================================
+# ARQUIVOS ESTÁTICOS (DESENVOLVIMENTO)
+# ================================================================
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# ================================================================
+# RESUMO DOS ENDPOINTS ESPERADOS:
+# ================================================================
+# /admin/                    - Django Admin
+# /api/                      - API Root (informações do sistema)
+# /api/operadores/           - APIs de operadores  
+# /api/equipamentos/         - APIs de equipamentos
+# /api/nr12/                 - APIs de checklist NR12
+# /operadores/               - Views HTML de operadores
+# + outros apps opcionais conforme disponibilidade
