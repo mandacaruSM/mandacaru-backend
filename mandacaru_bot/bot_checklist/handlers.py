@@ -1,11 +1,11 @@
+# -*- coding: utf-8 -*-
 # ===============================================
-# ARQUIVO: mandacaru_bot/bot_checklist/handlers.py
-# Handlers completos do Checklist NR12
+# HANDLERS COMPLETOS DO CHECKLIST - VERSÃO CORRIGIDA
 # ===============================================
 
 import logging
 from datetime import datetime, date
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, Union
 from aiogram import Dispatcher, F
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -14,15 +14,19 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+# Imports do core
+from core.db import (
+    buscar_equipamentos_com_nr12, buscar_checklists_nr12,
+    criar_checklist_nr12, buscar_itens_checklist_nr12,
+    atualizar_item_checklist_nr12, finalizar_checklist_nr12
+)
 from core.session import (
     obter_operador_sessao, verificar_autenticacao,
-    obter_equipamento_atual, definir_dados_temporarios,
-    obter_dados_temporarios, definir_equipamento_atual,
+    definir_dados_temporarios, obter_dados_temporarios,
     limpar_dados_temporarios
 )
-from core.db import fazer_requisicao_api, buscar_equipamento_por_id
 from core.templates import MessageTemplates
-from core.utils import Validators, Formatters
+from core.middleware import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -37,647 +41,454 @@ class ChecklistStates(StatesGroup):
     aguardando_confirmacao = State()
 
 # ===============================================
-# FUNÇÕES DE API ESPECÍFICAS DO CHECKLIST
-# ===============================================
-
-async def buscar_checklists_operador(operador_id: int) -> List[Dict[str, Any]]:
-    """Busca checklists disponíveis para o operador"""
-    logger.info(f"🔍 Buscando checklists para operador {operador_id}")
-    
-    result = await fazer_requisicao_api('GET', f'operadores/{operador_id}/equipamentos/')
-    
-    if result and result.get('success'):
-        checklists = result.get('results', [])
-        logger.info(f"✅ {len(checklists)} checklists encontrados")
-        return checklists
-    
-    logger.warning(f"⚠️ Nenhum checklist encontrado para operador {operador_id}")
-    return []
-
-async def buscar_equipamentos_operador(operador_id: int) -> List[Dict[str, Any]]:
-    """Busca equipamentos que o operador pode operar"""
-    logger.info(f"🔍 Buscando equipamentos para operador {operador_id}")
-    
-    result = await fazer_requisicao_api('GET', f'operadores/{operador_id}/equipamentos/')
-    
-    if result and result.get('success'):
-        equipamentos = result.get('equipamentos', [])
-        logger.info(f"✅ {len(equipamentos)} equipamentos encontrados")
-        return equipamentos
-    
-    logger.warning(f"⚠️ Nenhum equipamento encontrado para operador {operador_id}")
-    return []
-
-async def criar_checklist_equipamento(
-    equipamento_id: int, 
-    operador_codigo: str,
-    turno: str = "MANHA"
-) -> Optional[Dict[str, Any]]:
-    """Cria novo checklist para equipamento"""
-    logger.info(f"➕ Criando checklist para equipamento {equipamento_id}")
-    
-    data = {
-        'acao': 'criar_checklist',
-        'operador_codigo': operador_codigo,
-        'turno': turno,
-        'frequencia': 'DIARIA'
-    }
-    
-    result = await fazer_requisicao_api('POST', f'nr12/bot/equipamento/{equipamento_id}/', data=data)
-    
-    if result and result.get('success'):
-        logger.info(f"✅ Checklist criado: {result.get('checklist', {}).get('id')}")
-        return result
-    
-    logger.error(f"❌ Erro ao criar checklist: {result.get('error', 'Erro desconhecido') if result else 'Sem resposta'}")
-    return None
-
-async def iniciar_checklist(checklist_id: int, operador_codigo: str) -> Optional[Dict[str, Any]]:
-    """Inicia execução de checklist"""
-    logger.info(f"▶️ Iniciando checklist {checklist_id}")
-    
-    data = {
-        'acao': 'iniciar_checklist',
-        'checklist_id': checklist_id,
-        'operador_codigo': operador_codigo
-    }
-    
-    # Usar endpoint genérico para buscar dados do checklist
-    result = await fazer_requisicao_api('GET', f'nr12/checklists/{checklist_id}/')
-    
-    if result:
-        logger.info(f"✅ Checklist {checklist_id} iniciado")
-        return result
-    
-    logger.error(f"❌ Erro ao iniciar checklist {checklist_id}")
-    return None
-
-async def buscar_itens_checklist(checklist_id: int) -> List[Dict[str, Any]]:
-    """Busca itens de um checklist"""
-    logger.info(f"📋 Buscando itens do checklist {checklist_id}")
-    
-    result = await fazer_requisicao_api('GET', f'nr12/checklists/{checklist_id}/itens/')
-    
-    if result:
-        itens = result.get('results', []) if isinstance(result, dict) else result
-        logger.info(f"✅ {len(itens)} itens encontrados")
-        return itens
-    
-    logger.warning(f"⚠️ Nenhum item encontrado para checklist {checklist_id}")
-    return []
-
-async def atualizar_item_checklist(
-    item_id: int,
-    status: str,
-    observacao: str = "",
-    operador_codigo: str = "BOT001"
-) -> bool:
-    """Atualiza item do checklist usando endpoint correto"""
-    logger.info(f"🔄 Atualizando item {item_id} com status {status}")
-    
-    data = {
-        'item_id': item_id,
-        'status': status,
-        'observacao': observacao,
-        'operador_codigo': operador_codigo
-    }
-    
-    result = await fazer_requisicao_api('POST', 'nr12/bot/item-checklist/atualizar/', data=data)
-    
-    if result and result.get('success'):
-        logger.info(f"✅ Item {item_id} atualizado com sucesso")
-        return True
-    
-    logger.error(f"❌ Erro ao atualizar item {item_id}: {result.get('error', 'Erro desconhecido') if result else 'Sem resposta'}")
-    return False
-
-# ===============================================
 # HANDLERS PRINCIPAIS
 # ===============================================
 
-def require_auth(handler):
-    """Decorator que exige autenticação (reutilizado do módulo principal)"""
-    async def wrapper(obj, *args, **kwargs):
-        # Determinar chat_id baseado no tipo de objeto
-        if hasattr(obj, 'chat'):
-            chat_id = str(obj.chat.id)
-        elif hasattr(obj, 'message') and hasattr(obj.message, 'chat'):
-            chat_id = str(obj.message.chat.id)
-        else:
-            logger.error("❌ Não foi possível determinar chat_id")
-            return
-        
-        # Verificar autenticação
-        if not verificar_autenticacao(chat_id):
-            await obj.answer(MessageTemplates.unauthorized_access())
-            return
-        
-        # Adicionar operador aos argumentos
-        operador = obter_operador_sessao(chat_id)
-        kwargs['operador'] = operador
-        
-        return await handler(obj, *args, **kwargs)
-    
-    return wrapper
-
 @require_auth
-async def listar_checklists_handler(callback: CallbackQuery, operador=None):
-    """Lista checklists disponíveis para o operador"""
-    chat_id = str(callback.message.chat.id)
-    
+async def comando_checklist(message: Message, operador: dict = None):
+    """Handler principal do comando /checklist"""
     try:
-        await callback.answer()
-        
-        # Buscar checklists do operador
-        checklists = await buscar_checklists_operador(operador['id'])
-        
-        if not checklists:
-            await callback.message.edit_text(
-                "📋 **Nenhum Checklist Disponível**\n\n"
-                "Você não possui checklists pendentes no momento.\n\n"
-                "💡 Escaneie um QR Code de equipamento para criar um novo checklist.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
-                ])
-            )
-            return
-        
-        # Criar keyboard com checklists
-        keyboard = []
-        texto = MessageTemplates.checklist_list_header()
-        
-        for i, checklist in enumerate(checklists[:10], 1):
-            equipamento_nome = checklist.get('equipamento_nome', 'Equipamento')
-            status = checklist.get('status', 'PENDENTE')
-            data_checklist = checklist.get('data_checklist', 'Hoje')
-            
-            # Emoji baseado no status
-            emoji = "📋" if status == "PENDENTE" else "✅" if status == "CONCLUIDO" else "🔄"
-            
-            texto += f"\n{i}. {emoji} **{equipamento_nome}**"
-            texto += f"\n   Status: {status}"
-            texto += f"\n   Data: {data_checklist}\n"
-            
-            # Botão para acessar checklist
-            callback_data = f"checklist_select_{checklist.get('id', 0)}"
-            keyboard.append([
-                InlineKeyboardButton(
-                    text=f"{emoji} {equipamento_nome}",
-                    callback_data=callback_data
-                )
-            ])
-        
-        # Botão de voltar
-        keyboard.append([
-            InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")
-        ])
-        
-        await callback.message.edit_text(
-            texto,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-        )
-        
+        await mostrar_menu_checklist(message, operador)
     except Exception as e:
-        logger.error(f"❌ Erro ao listar checklists: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
+        logger.error(f"Erro no comando checklist: {e}")
+        await message.answer("❌ Erro ao carregar checklist. Tente novamente.")
 
-@require_auth
-async def listar_equipamentos_handler(callback: CallbackQuery, operador=None):
-    """Lista equipamentos disponíveis para o operador"""
-    chat_id = str(callback.message.chat.id)
-    
+async def mostrar_menu_checklist(message: Message, operador: dict):
+    """Mostra menu principal do checklist"""
     try:
-        await callback.answer()
+        # Buscar checklists pendentes do operador
+        operador_id = operador.get('id')
+        checklists_hoje = await buscar_checklists_nr12(operador_id=operador_id)
         
-        # Buscar equipamentos do operador
-        equipamentos = await buscar_equipamentos_operador(operador['id'])
+        # Contar checklists por status
+        pendentes = len([c for c in checklists_hoje if c.get('status') == 'PENDENTE'])
+        em_andamento = len([c for c in checklists_hoje if c.get('status') == 'EM_ANDAMENTO'])
         
-        if not equipamentos:
-            await callback.message.edit_text(
-                "🚜 **Nenhum Equipamento Disponível**\n\n"
-                "Você não tem equipamentos autorizados para operar.\n\n"
-                "💡 Contate seu supervisor para obter acesso.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
-                ])
-            )
-            return
-        
-        # Criar keyboard com equipamentos
-        keyboard = []
-        texto = "🚜 **Equipamentos Disponíveis**\n\nSelecione um equipamento:"
-        
-        for i, equipamento in enumerate(equipamentos[:10], 1):
-            nome = equipamento.get('nome', 'Equipamento')
-            status = equipamento.get('status_operacional', 'Operacional')
-            horimetro = equipamento.get('horimetro_atual', 0)
-            
-            # Emoji baseado no status
-            emoji = "🟢" if status == "Operacional" else "🟡" if status == "Manutenção" else "🔴"
-            
-            texto += f"\n{i}. {emoji} **{nome}**"
-            texto += f"\n   Status: {status}"
-            texto += f"\n   Horímetro: {Formatters.formatar_horimetro(horimetro)}\n"
-            
-            # Botão para selecionar equipamento
-            callback_data = f"equipment_select_{equipamento.get('id', 0)}"
-            keyboard.append([
-                InlineKeyboardButton(
-                    text=f"{emoji} {nome}",
-                    callback_data=callback_data
-                )
-            ])
-        
-        # Botão de voltar
-        keyboard.append([
-            InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")
-        ])
-        
-        await callback.message.edit_text(
-            texto,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao listar equipamentos: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-@require_auth
-async def selecionar_equipamento_handler(callback: CallbackQuery, operador=None):
-    """Seleciona equipamento e mostra opções"""
-    chat_id = str(callback.message.chat.id)
-    
-    try:
-        await callback.answer()
-        
-        # Extrair ID do equipamento
-        equipamento_id = int(callback.data.split('_')[-1])
-        
-        # Buscar dados do equipamento
-        equipamento = await buscar_equipamento_por_id(equipamento_id)
-        
-        if not equipamento:
-            await callback.message.edit_text(
-                "❌ **Equipamento Não Encontrado**\n\n"
-                "Não foi possível localizar o equipamento selecionado.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="list_equipamentos")]
-                ])
-            )
-            return
-        
-        # Salvar equipamento na sessão
-        definir_equipamento_atual(chat_id, equipamento)
-        
-        # Criar menu do equipamento
-        nome = equipamento.get('nome', 'Equipamento')
-        status = equipamento.get('status_operacional', 'N/A')
-        horimetro = equipamento.get('horimetro_atual', 0)
-        
-        texto = MessageTemplates.equipment_menu(nome)
-        texto += f"\n**Status:** {status}"
-        texto += f"\n**Horímetro:** {Formatters.formatar_horimetro(horimetro)}"
+        texto = f"📋 **Checklist NR12**\n\n"
+        texto += f"👤 **Operador:** {operador.get('nome')}\n"
+        texto += f"📅 **Data:** {date.today().strftime('%d/%m/%Y')}\n\n"
+        texto += f"📊 **Status:**\n"
+        texto += f"   🟡 Pendentes: {pendentes}\n"
+        texto += f"   🔵 Em andamento: {em_andamento}\n\n"
+        texto += f"Escolha uma opção:"
         
         keyboard = [
-            [
-                InlineKeyboardButton(text="📋 Novo Checklist", callback_data=f"create_checklist_{equipamento_id}"),
-                InlineKeyboardButton(text="📊 Ver Histórico", callback_data=f"checklist_history_{equipamento_id}")
-            ],
-            [
-                InlineKeyboardButton(text="🔙 Voltar", callback_data="list_equipamentos"),
-                InlineKeyboardButton(text="🏠 Menu", callback_data="menu_refresh")
-            ]
+            [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="checklist_meus")],
+            [InlineKeyboardButton(text="🔍 Equipamentos", callback_data="checklist_equipamentos")],
+            [InlineKeyboardButton(text="➕ Novo Checklist", callback_data="checklist_novo")],
+            [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_principal")]
         ]
         
-        await callback.message.edit_text(
-            texto,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-        )
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await message.answer(texto, reply_markup=markup, parse_mode='Markdown')
         
     except Exception as e:
-        logger.error(f"❌ Erro ao selecionar equipamento: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
+        logger.error(f"Erro ao mostrar menu checklist: {e}")
+        await message.answer("❌ Erro ao carregar menu. Tente novamente.")
 
-@require_auth
-async def criar_checklist_handler(callback: CallbackQuery, operador=None):
-    """Cria novo checklist para equipamento"""
-    chat_id = str(callback.message.chat.id)
-    
+async def mostrar_equipamentos_checklist(message: Message, operador: dict):
+    """Mostra equipamentos disponíveis para checklist"""
     try:
-        await callback.answer("⏳ Criando checklist...", show_alert=True)
+        # Buscar equipamentos com NR12 do operador
+        operador_id = operador.get('id')
+        equipamentos = await buscar_equipamentos_com_nr12(operador_id=operador_id)
         
-        # Extrair ID do equipamento
-        equipamento_id = int(callback.data.split('_')[-1])
-        
-        # Criar checklist
-        resultado = await criar_checklist_equipamento(
-            equipamento_id, 
-            operador['codigo']
-        )
-        
-        if resultado and resultado.get('success'):
-            checklist = resultado.get('checklist', {})
-            checklist_id = checklist.get('id')
-            
-            # Salvar dados do checklist na sessão
-            definir_dados_temporarios(chat_id, 'checklist_atual', checklist)
-            
-            # Mostrar confirmação e opções
-            texto = f"✅ **Checklist Criado!**\n\n"
-            texto += f"**ID:** {checklist_id}\n"
-            texto += f"**Turno:** {checklist.get('turno', 'MANHA')}\n"
-            texto += f"**Total de itens:** {checklist.get('total_itens', '?')}\n\n"
-            texto += "O que deseja fazer?"
-            
-            keyboard = [
-                [InlineKeyboardButton(text="▶️ Iniciar Agora", callback_data=f"start_checklist_{checklist_id}")],
-                [InlineKeyboardButton(text="📋 Ver Detalhes", callback_data=f"checklist_details_{checklist_id}")],
-                [InlineKeyboardButton(text="🔙 Voltar", callback_data=f"equipment_select_{equipamento_id}")]
-            ]
-            
-            await callback.message.edit_text(
-                texto,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-            )
-        else:
-            erro = resultado.get('error', 'Erro desconhecido') if resultado else 'Falha na comunicação'
-            
-            await callback.message.edit_text(
-                f"❌ **Erro ao Criar Checklist**\n\n{erro}\n\n"
-                "Tente novamente ou contate o suporte.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔄 Tentar Novamente", callback_data=f"create_checklist_{equipamento_id}")],
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data=f"equipment_select_{equipamento_id}")]
-                ])
-            )
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao criar checklist: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-@require_auth
-async def executar_checklist_handler(callback: CallbackQuery, state: FSMContext, operador=None):
-    """Inicia execução de checklist item por item"""
-    chat_id = str(callback.message.chat.id)
-    
-    try:
-        await callback.answer("⏳ Carregando checklist...")
-        
-        # Extrair ID do checklist
-        checklist_id = int(callback.data.split('_')[-1])
-        
-        # Buscar dados do checklist
-        checklist = await buscar_checklist_por_id(checklist_id)
-        
-        if not checklist:
-            await callback.message.edit_text(
-                "❌ **Checklist Não Encontrado**\n\n"
-                "Não foi possível localizar o checklist selecionado.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="list_checklists")]
-                ])
+        if not equipamentos:
+            await message.answer(
+                "🔧 **Equipamentos NR12**\n\n"
+                "❌ Nenhum equipamento encontrado\n\n"
+                "Você não tem equipamentos com NR12 configurado\n"
+                "ou não há equipamentos disponíveis no momento.\n\n"
+                "💬 Entre em contato com o supervisor.",
+                parse_mode='Markdown'
             )
             return
         
+        texto = f"🔧 **Equipamentos NR12**\n\n"
+        texto += f"Selecione um equipamento para checklist:\n\n"
+        
+        keyboard = []
+        for equipamento in equipamentos[:10]:  # Limitar a 10
+            nome = equipamento.get('nome', equipamento.get('numero_serie', 'Sem nome'))
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"🔧 {nome}",
+                    callback_data=f"selecionar_eq_{equipamento['id']}"
+                )
+            ])
+        
+        keyboard.append([
+            InlineKeyboardButton(text="🔄 Atualizar", callback_data="checklist_equipamentos"),
+            InlineKeyboardButton(text="◀️ Voltar", callback_data="checklist_menu")
+        ])
+        
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await message.answer(texto, reply_markup=markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Erro ao mostrar equipamentos: {e}")
+        await message.answer("❌ Erro ao carregar equipamentos. Tente novamente.")
+
+async def mostrar_meus_checklists(message: Message, operador: dict):
+    """Mostra checklists do operador"""
+    try:
+        operador_id = operador.get('id')
+        checklists = await buscar_checklists_nr12(operador_id=operador_id)
+        
+        if not checklists:
+            texto = "📋 **Meus Checklists**\n\n"
+            texto += "❌ Nenhum checklist encontrado\n\n"
+            texto += "Você ainda não possui checklists atribuídos."
+        else:
+            texto = f"📋 **Meus Checklists**\n\n"
+            texto += f"📊 Total: {len(checklists)}\n\n"
+            
+            for checklist in checklists[:5]:  # Mostrar últimos 5
+                status_emoji = {
+                    'PENDENTE': '🟡',
+                    'EM_ANDAMENTO': '🔵', 
+                    'CONCLUIDO': '✅',
+                    'CANCELADO': '❌'
+                }.get(checklist.get('status', ''), '❓')
+                
+                equipamento_nome = checklist.get('equipamento_nome', 'Equipamento')
+                data_str = checklist.get('data_checklist', 'Sem data')
+                
+                texto += f"{status_emoji} **{equipamento_nome}**\n"
+                texto += f"   📅 {data_str}\n"
+                texto += f"   📊 {checklist.get('status', 'Sem status')}\n\n"
+        
+        keyboard = [
+            [InlineKeyboardButton(text="🔄 Atualizar", callback_data="checklist_meus")],
+            [InlineKeyboardButton(text="◀️ Voltar", callback_data="checklist_menu")]
+        ]
+        
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await message.answer(texto, reply_markup=markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Erro ao mostrar meus checklists: {e}")
+        await message.answer("❌ Erro ao carregar seus checklists.")
+
+# ===============================================
+# HANDLER DE CALLBACKS
+# ===============================================
+
+async def handle_checklist_callback(callback: CallbackQuery, state: FSMContext):
+    """Handler principal para todos os callbacks do checklist"""
+    try:
+        data = callback.data
+        chat_id = str(callback.from_user.id)
+        
+        # Verificar autenticação
+        operador = await obter_operador_sessao(chat_id)
+        if not operador:
+            await callback.answer("❌ Sessão expirada")
+            return
+        
+        # Processar diferentes tipos de callback
+        if data == "checklist_menu":
+            await mostrar_menu_checklist(callback.message, operador)
+            
+        elif data == "checklist_meus":
+            await mostrar_meus_checklists(callback.message, operador)
+            
+        elif data == "checklist_equipamentos":
+            await mostrar_equipamentos_checklist(callback.message, operador)
+            
+        elif data == "checklist_novo":
+            await mostrar_equipamentos_checklist(callback.message, operador)
+            
+        elif data.startswith("selecionar_eq_"):
+            equipamento_id = int(data.split("_")[-1])
+            await iniciar_checklist_equipamento(callback, equipamento_id, operador, state)
+            
+        elif data.startswith("iniciar_checklist_"):
+            checklist_id = int(data.split("_")[-1])
+            await iniciar_execucao_checklist(callback, checklist_id, operador, state)
+            
+        elif data.startswith("continuar_checklist_"):
+            checklist_id = int(data.split("_")[-1])
+            await continuar_execucao_checklist(callback, checklist_id, operador, state)
+            
+        elif data.startswith("resposta_"):
+            await processar_resposta_item(callback, operador, state)
+            
+        elif data == "finalizar_checklist":
+            await finalizar_checklist_atual(callback, operador, state)
+            
+        elif data == "pausar_checklist":
+            await callback.answer("⏸️ Checklist pausado")
+            await callback.message.answer("⏸️ Checklist pausado. Use /checklist para continuar.")
+            await state.clear()
+            
+        else:
+            await callback.answer("❓ Ação não reconhecida")
+        
+        await callback.answer()
+            
+    except Exception as e:
+        logger.error(f"Erro no callback checklist: {e}")
+        await callback.answer("❌ Erro interno")
+
+# ===============================================
+# FUNÇÕES DE CHECKLIST
+# ===============================================
+
+async def iniciar_checklist_equipamento(callback: CallbackQuery, equipamento_id: int, operador: dict, state: FSMContext):
+    """Inicia processo de checklist para um equipamento"""
+    try:
+        # Verificar se já existe checklist hoje
+        hoje = date.today().strftime('%Y-%m-%d')
+        checklists_hoje = await buscar_checklists_nr12(
+            equipamento_id=equipamento_id,
+            operador_id=operador.get('id')
+        )
+        
+        checklist_hoje = None
+        for c in checklists_hoje:
+            if c.get('data_checklist') == hoje:
+                checklist_hoje = c
+                break
+        
+        if checklist_hoje:
+            if checklist_hoje.get('status') == 'CONCLUIDO':
+                await callback.message.answer(
+                    "✅ **Checklist já concluído**\n\n"
+                    "O checklist deste equipamento já foi realizado hoje.\n\n"
+                    "📊 Status: Concluído",
+                    parse_mode='Markdown'
+                )
+                return
+            else:
+                # Continuar checklist existente
+                await continuar_execucao_checklist(callback, checklist_hoje['id'], operador, state)
+                return
+        
+        # Criar novo checklist
+        dados_checklist = {
+            'equipamento_id': equipamento_id,
+            'operador_id': operador.get('id'),
+            'data_checklist': hoje,
+            'turno': calcular_turno_atual(),
+            'status': 'EM_ANDAMENTO'
+        }
+        
+        novo_checklist = await criar_checklist_nr12(dados_checklist)
+        
+        if novo_checklist:
+            await iniciar_execucao_checklist(callback, novo_checklist['id'], operador, state)
+        else:
+            await callback.message.answer("❌ Erro ao criar checklist. Tente novamente.")
+            
+    except Exception as e:
+        logger.error(f"Erro ao iniciar checklist: {e}")
+        await callback.message.answer("❌ Erro ao iniciar checklist.")
+
+async def iniciar_execucao_checklist(callback: CallbackQuery, checklist_id: int, operador: dict, state: FSMContext):
+    """Inicia a execução de um checklist"""
+    try:
         # Buscar itens do checklist
-        itens = await buscar_itens_checklist(checklist_id)
+        itens = await buscar_itens_checklist_nr12(checklist_id)
         
         if not itens:
-            await callback.message.edit_text(
-                "📋 **Checklist Vazio**\n\n"
-                "Este checklist não possui itens para verificação.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="list_checklists")]
-                ])
-            )
-            return
-        
-        # Filtrar apenas itens pendentes
-        itens_pendentes = [item for item in itens if item.get('status') == 'PENDENTE']
-        
-        if not itens_pendentes:
-            await callback.message.edit_text(
-                "✅ **Checklist Completo**\n\n"
-                "Todos os itens já foram verificados!",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📊 Ver Resultado", callback_data=f"checklist_result_{checklist_id}")],
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="list_checklists")]
-                ])
-            )
+            await callback.message.answer("❌ Checklist sem itens configurados.")
             return
         
         # Salvar dados na sessão
-        definir_dados_temporarios(chat_id, 'checklist_ativo', checklist)
-        definir_dados_temporarios(chat_id, 'itens_checklist', itens)
-        definir_dados_temporarios(chat_id, 'itens_pendentes', itens_pendentes)
-        definir_dados_temporarios(chat_id, 'item_atual_index', 0)
-        
-        # Iniciar primeiro item
-        await mostrar_proximo_item(callback.message, chat_id, state)
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao executar checklist: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-async def mostrar_proximo_item(message: Message, chat_id: str, state: FSMContext):
-    """Mostra o próximo item do checklist"""
-    try:
-        # Obter dados da sessão
-        checklist = obter_dados_temporarios(chat_id, 'checklist_ativo')
-        itens_pendentes = obter_dados_temporarios(chat_id, 'itens_pendentes', [])
-        index_atual = obter_dados_temporarios(chat_id, 'item_atual_index', 0)
-        
-        if index_atual >= len(itens_pendentes):
-            # Todos os itens foram processados
-            await finalizar_checklist_completo(message, chat_id)
-            return
-        
-        item_atual = itens_pendentes[index_atual]
-        total_itens = len(itens_pendentes)
-        
-        # Informações do item
-        item_text = item_atual.get('item', 'Item não especificado')
-        descricao = item_atual.get('descricao', '')
-        criticidade = item_atual.get('criticidade', 'BAIXA')
-        
-        # Criar texto da pergunta
-        texto = MessageTemplates.checklist_item_question(
-            index_atual + 1, 
-            total_itens, 
-            item_text
-        )
-        
-        if descricao:
-            texto += f"\n\n**Descrição:** {descricao}"
-        
-        # Emoji baseado na criticidade
-        if criticidade == 'CRITICA':
-            texto += f"\n\n🔴 **ITEM CRÍTICO** - Falha pode parar operação"
-        elif criticidade == 'ALTA':
-            texto += f"\n\n🟡 **Alta prioridade**"
-        
-        # Criar keyboard de respostas
-        keyboard = []
-        
-        # Botões de resposta
-        keyboard.append([
-            InlineKeyboardButton(text="✅ OK", callback_data=f"item_ok_{item_atual['id']}"),
-            InlineKeyboardButton(text="❌ NOK", callback_data=f"item_nok_{item_atual['id']}")
-        ])
-        
-        # Se permite N/A
-        if item_atual.get('permite_na', False):
-            keyboard.append([
-                InlineKeyboardButton(text="➖ N/A", callback_data=f"item_na_{item_atual['id']}")
-            ])
-        
-        # Botões de ação
-        keyboard.append([
-            InlineKeyboardButton(text="📝 Observação", callback_data=f"item_obs_{item_atual['id']}"),
-            InlineKeyboardButton(text="📸 Foto", callback_data=f"item_photo_{item_atual['id']}")
-        ])
-        
-        # Botão de sair
-        keyboard.append([
-            InlineKeyboardButton(text="💾 Salvar e Sair", callback_data="checklist_save_exit"),
-            InlineKeyboardButton(text="🔙 Anterior", callback_data="item_previous") if index_atual > 0 else None
-        ])
-        
-        # Filtrar botões None
-        keyboard = [[btn for btn in row if btn is not None] for row in keyboard]
+        chat_id = str(callback.from_user.id)
+        await definir_dados_temporarios(chat_id, 'checklist_id', checklist_id)
+        await definir_dados_temporarios(chat_id, 'itens', itens)
+        await definir_dados_temporarios(chat_id, 'item_atual', 0)
+        await definir_dados_temporarios(chat_id, 'respostas', {})
         
         # Definir estado
         await state.set_state(ChecklistStates.executando_checklist)
         
-        try:
-            await message.edit_text(
-                texto,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-            )
-        except:
-            await message.answer(
-                texto,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-            )
+        # Mostrar primeiro item
+        await mostrar_item_atual(callback.message, chat_id)
         
     except Exception as e:
-        logger.error(f"❌ Erro ao mostrar próximo item: {e}")
-        await message.answer(MessageTemplates.error_generic())
+        logger.error(f"Erro ao iniciar execução: {e}")
+        await callback.message.answer("❌ Erro ao carregar checklist.")
 
-@require_auth
-async def processar_resposta_item(callback: CallbackQuery, state: FSMContext, operador=None):
-    """Processa resposta de item do checklist"""
-    chat_id = str(callback.message.chat.id)
-    
+async def continuar_execucao_checklist(callback: CallbackQuery, checklist_id: int, operador: dict, state: FSMContext):
+    """Continua execução de checklist em andamento"""
     try:
-        await callback.answer()
-        
-        # Extrair dados do callback
-        partes = callback.data.split('_')
-        acao = partes[1]  # ok, nok, na
-        item_id = int(partes[2])
-        
-        # Mapear ação para status
-        status_map = {
-            'ok': 'OK',
-            'nok': 'NOK',
-            'na': 'NA'
-        }
-        
-        status = status_map.get(acao, 'PENDENTE')
-        
-        # Atualizar item na API
-        sucesso = await atualizar_item_checklist_nr12(
-            item_id, 
-            status, 
-            "",  # observação vazia por enquanto
-            operador['codigo']
-        )
-        
-        if sucesso:
-            # Avançar para próximo item
-            index_atual = obter_dados_temporarios(chat_id, 'item_atual_index', 0)
-            definir_dados_temporarios(chat_id, 'item_atual_index', index_atual + 1)
-            
-            # Mostrar próximo item
-            await mostrar_proximo_item(callback.message, chat_id, state)
-        else:
-            await callback.message.edit_text(
-                "❌ **Erro ao Salvar Resposta**\n\n"
-                "Não foi possível salvar a resposta. Tente novamente.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔄 Tentar Novamente", callback_data=callback.data)],
-                    [InlineKeyboardButton(text="💾 Salvar e Sair", callback_data="checklist_save_exit")]
-                ])
-            )
+        # Implementar lógica para continuar checklist
+        await iniciar_execucao_checklist(callback, checklist_id, operador, state)
         
     except Exception as e:
-        logger.error(f"❌ Erro ao processar resposta: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
+        logger.error(f"Erro ao continuar checklist: {e}")
+        await callback.message.answer("❌ Erro ao continuar checklist.")
 
-async def finalizar_checklist_completo(message: Message, chat_id: str):
-    """Finaliza checklist completamente"""
+async def mostrar_item_atual(message: Message, chat_id: str):
+    """Mostra o item atual do checklist"""
     try:
-        checklist = obter_dados_temporarios(chat_id, 'checklist_ativo')
+        itens = await obter_dados_temporarios(chat_id, 'itens', [])
+        item_atual_idx = await obter_dados_temporarios(chat_id, 'item_atual', 0)
         
-        if not checklist:
-            await message.edit_text("❌ Erro: Dados do checklist perdidos")
+        if item_atual_idx >= len(itens):
+            # Checklist completo
+            await finalizar_checklist_automatico(message, chat_id)
             return
         
-        # Buscar resultado final
-        checklist_final = await buscar_checklist_por_id(checklist['id'])
+        item = itens[item_atual_idx]
         
-        if checklist_final:
-            equipamento_nome = checklist_final.get('equipamento_nome', 'Equipamento')
-            total_itens = checklist_final.get('total_itens', 0)
-            itens_ok = checklist_final.get('itens_aprovados', 0)
-            
-            texto = MessageTemplates.checklist_completed(
-                equipamento_nome,
-                total_itens,
-                itens_ok
-            )
-        else:
-            texto = "✅ **Checklist Finalizado!**\n\nO checklist foi concluído com sucesso."
+        texto = f"📋 **Checklist - Item {item_atual_idx + 1}/{len(itens)}**\n\n"
+        texto += f"❓ **{item.get('descricao', 'Item sem descrição')}**\n\n"
         
-        # Limpar dados temporários
-        limpar_dados_temporarios(chat_id)
+        if item.get('observacoes'):
+            texto += f"📝 *{item.get('observacoes')}*\n\n"
+        
+        texto += "Selecione sua resposta:"
         
         keyboard = [
-            [InlineKeyboardButton(text="📊 Ver Relatório", callback_data=f"checklist_report_{checklist['id']}")],
-            [InlineKeyboardButton(text="📋 Novo Checklist", callback_data="list_equipamentos")],
-            [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
+            [
+                InlineKeyboardButton(text="✅ Conforme", callback_data="resposta_conforme"),
+                InlineKeyboardButton(text="❌ Não Conforme", callback_data="resposta_nao_conforme")
+            ],
+            [
+                InlineKeyboardButton(text="❓ N/A", callback_data="resposta_na"),
+                InlineKeyboardButton(text="⏸️ Pausar", callback_data="pausar_checklist")
+            ]
         ]
         
-        await message.edit_text(
-            texto,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-        )
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await message.answer(texto, reply_markup=markup, parse_mode='Markdown')
         
     except Exception as e:
-        logger.error(f"❌ Erro ao finalizar checklist: {e}")
-        await message.answer(MessageTemplates.error_generic())
+        logger.error(f"Erro ao mostrar item: {e}")
+        await message.answer("❌ Erro ao carregar item.")
+
+async def processar_resposta_item(callback: CallbackQuery, operador: dict, state: FSMContext):
+    """Processa resposta de um item do checklist"""
+    try:
+        chat_id = str(callback.from_user.id)
+        resposta = callback.data.split("_")[-1]  # conforme, nao_conforme, na
+        
+        # Obter dados atuais
+        itens = await obter_dados_temporarios(chat_id, 'itens', [])
+        item_atual_idx = await obter_dados_temporarios(chat_id, 'item_atual', 0)
+        respostas = await obter_dados_temporarios(chat_id, 'respostas', {})
+        
+        if item_atual_idx >= len(itens):
+            await callback.answer("❌ Item não encontrado")
+            return
+        
+        item = itens[item_atual_idx]
+        
+        # Salvar resposta
+        respostas[str(item['id'])] = {
+            'resposta': resposta,
+            'data_resposta': datetime.now().isoformat(),
+            'operador_id': operador.get('id')
+        }
+        
+        # Atualizar na API
+        await atualizar_item_checklist_nr12(item['id'], respostas[str(item['id'])])
+        
+        # Salvar dados atualizados
+        await definir_dados_temporarios(chat_id, 'respostas', respostas)
+        await definir_dados_temporarios(chat_id, 'item_atual', item_atual_idx + 1)
+        
+        # Mostrar próximo item
+        await mostrar_item_atual(callback.message, chat_id)
+        
+    except Exception as e:
+        logger.error(f"Erro ao processar resposta: {e}")
+        await callback.answer("❌ Erro ao salvar resposta")
+
+async def finalizar_checklist_automatico(message: Message, chat_id: str):
+    """Finaliza checklist automaticamente quando todos os itens são respondidos"""
+    try:
+        checklist_id = await obter_dados_temporarios(chat_id, 'checklist_id')
+        
+        if checklist_id:
+            resultado = await finalizar_checklist_nr12(checklist_id)
+            
+            if resultado:
+                await message.answer(
+                    "✅ **Checklist Concluído!**\n\n"
+                    "Todos os itens foram verificados com sucesso.\n\n"
+                    "📊 Status: Finalizado\n"
+                    "📅 Data: " + datetime.now().strftime('%d/%m/%Y %H:%M'),
+                    parse_mode='Markdown'
+                )
+            else:
+                await message.answer("⚠️ Checklist completado mas houve erro na finalização.")
+        
+        # Limpar dados temporários
+        await limpar_dados_temporarios(chat_id)
+        
+    except Exception as e:
+        logger.error(f"Erro ao finalizar checklist: {e}")
+        await message.answer("❌ Erro ao finalizar checklist.")
+
+async def finalizar_checklist_atual(callback: CallbackQuery, operador: dict, state: FSMContext):
+    """Finaliza checklist atual manualmente"""
+    try:
+        chat_id = str(callback.from_user.id)
+        await finalizar_checklist_automatico(callback.message, chat_id)
+        await state.clear()
+        
+    except Exception as e:
+        logger.error(f"Erro ao finalizar: {e}")
+        await callback.answer("❌ Erro ao finalizar")
 
 # ===============================================
-# REGISTRAR HANDLERS ATUALIZADOS
+# FUNÇÕES AUXILIARES
+# ===============================================
+
+def calcular_turno_atual() -> str:
+    """Calcula o turno atual baseado na hora"""
+    hora_atual = datetime.now().hour
+    
+    if 6 <= hora_atual < 14:
+        return 'MANHA'
+    elif 14 <= hora_atual < 22:
+        return 'TARDE'
+    else:
+        return 'NOITE'
+
+# ===============================================
+# REGISTRO DOS HANDLERS
 # ===============================================
 
 def register_handlers(dp: Dispatcher):
-    """Registra handlers de checklist no dispatcher"""
+    """Registra todos os handlers do módulo checklist"""
     
-    # Callbacks de checklist
-    dp.callback_query.register(listar_checklists_handler, F.data == "list_checklists")
-    dp.callback_query.register(listar_equipamentos_handler, F.data == "list_equipamentos")
-    dp.callback_query.register(selecionar_equipamento_handler, F.data.startswith("equipment_select_"))
-    dp.callback_query.register(criar_checklist_handler, F.data.startswith("create_checklist_"))
+    # Comando principal
+    dp.message.register(comando_checklist, Command("checklist"))
     
-    # Callbacks de execução de checklist
-    dp.callback_query.register(executar_checklist_handler, F.data.startswith("checklist_select_"))
-    dp.callback_query.register(executar_checklist_handler, F.data.startswith("start_checklist_"))
+    # Callbacks do checklist
+    dp.callback_query.register(
+        handle_checklist_callback,
+        F.data.startswith("checklist_")
+    )
+    dp.callback_query.register(
+        handle_checklist_callback,
+        F.data.startswith("selecionar_eq_")
+    )
+    dp.callback_query.register(
+        handle_checklist_callback,
+        F.data.startswith("iniciar_checklist_")
+    )
+    dp.callback_query.register(
+        handle_checklist_callback,
+        F.data.startswith("continuar_checklist_")
+    )
+    dp.callback_query.register(
+        handle_checklist_callback,
+        F.data.startswith("resposta_")
+    )
+    dp.callback_query.register(
+        handle_checklist_callback,
+        F.data == "finalizar_checklist"
+    )
+    dp.callback_query.register(
+        handle_checklist_callback,
+        F.data == "pausar_checklist"
+    )
     
-    # Callbacks de resposta de itens
-    dp.callback_query.register(processar_resposta_item, F.data.startswith("item_ok_"))
-    dp.callback_query.register(processar_resposta_item, F.data.startswith("item_nok_"))
-    dp.callback_query.register(processar_resposta_item, F.data.startswith("item_na_"))
-    
-    logger.info("✅ Handlers de checklist registrados")
+    logger.info("✅ Handlers de checklist registrados com sucesso")

@@ -535,8 +535,8 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(admin_callback_handler, F.data.startswith("admin_"))
     
     # Callbacks de lista/navegação
-    dp.callback_query.register(callback_handler, F.data.startswith("list_"))
-    dp.callback_query.register(callback_handler, F.data.in_({"scan_qr"}))
+    #dp.callback_query.register(callback_handler, F.data.startswith("list_"))
+    #dp.callback_query.register(callback_handler, F.data.in_({"scan_qr"}))
     
     logger.info("✅ Handlers principais registrados")
 
@@ -572,3 +572,84 @@ def register_reports_handlers(dp: Dispatcher):
         logger.warning(f"⚠️ Módulo relatórios não encontrado: {e}")
     except Exception as e:
         logger.error(f"❌ Erro ao registrar handlers de relatórios: {e}")
+
+# =============================================== 
+# HANDLERS ESPECÍFICOS PARA CALLBACKS PRINCIPAIS
+# ===============================================
+
+@require_auth
+async def handle_list_checklists(callback: CallbackQuery, operador=None):
+    """Handler para botão 'Meus Checklists'"""
+    try:
+        await callback.answer()
+        
+        # Redirecionar para o handler do módulo checklist
+        from bot_checklist.handlers import listar_checklists_handler
+        await listar_checklists_handler(callback, operador=operador)
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao listar checklists: {e}")
+        await callback.message.edit_text(MessageTemplates.error_generic())
+
+@require_auth 
+async def handle_list_equipamentos(callback: CallbackQuery, operador=None):
+    """Handler para botão 'Listar Equipamentos'"""
+    try:
+        await callback.answer()
+        
+        # Redirecionar para o handler do módulo checklist  
+        from bot_checklist.handlers import listar_equipamentos_handler
+        await listar_equipamentos_handler(callback, operador=operador)
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao listar equipamentos: {e}")
+        await callback.message.edit_text(MessageTemplates.error_generic())
+
+@require_auth
+async def handle_scan_qr(callback: CallbackQuery, operador=None):
+    """Handler para botão 'Buscar por QR'"""
+    try:
+        await callback.answer()
+        
+        # Redirecionar para o handler do módulo QR
+        from bot_qr.handlers import scan_new_qr_handler
+        await scan_new_qr_handler(callback, operador=operador)
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao processar QR: {e}")
+        await callback.message.edit_text(MessageTemplates.error_generic())
+
+# ===============================================
+# MODIFICAR A FUNÇÃO register_handlers EXISTENTE
+# ADICIONAR ESTAS LINHAS NO FINAL DA FUNÇÃO
+# ===============================================
+
+def register_handlers(dp: Dispatcher):
+    """Registra todos os handlers no dispatcher"""
+    
+    # Comandos principais
+    dp.message.register(start_handler, Command("start"))
+    dp.message.register(admin_handler, Command("admin"))
+    
+    # Estados de autenticação
+    dp.message.register(processar_nome_operador, AuthStates.waiting_for_name)
+    dp.message.register(processar_data_nascimento, AuthStates.waiting_for_birth_date)
+    
+    # Callbacks gerais
+    dp.callback_query.register(callback_handler, F.data.startswith("menu_"))
+    dp.callback_query.register(admin_callback_handler, F.data.startswith("admin_"))
+    
+    # Callbacks de lista/navegação  
+    dp.callback_query.register(callback_handler, F.data.startswith("list_"))
+    dp.callback_query.register(callback_handler, F.data.in_({"scan_qr"}))
+    
+    # ===============================================
+    # ADICIONAR ESTAS LINHAS (HANDLERS ESPECÍFICOS):
+    # ===============================================
+    
+    # Handlers específicos para botões principais
+    dp.callback_query.register(handle_list_checklists, F.data == "list_checklists")
+    dp.callback_query.register(handle_list_equipamentos, F.data == "list_equipamentos") 
+    dp.callback_query.register(handle_scan_qr, F.data == "scan_qr")
+    
+    logger.info("✅ Handlers principais registrados")

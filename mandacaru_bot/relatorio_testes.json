@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-08-07T18:27:44.346029",
+  "taxa_sucesso": 90.0,
+  "resultados": {
+    "1. Estrutura de Arquivos": true,
+    "2. Configurações": false,
+    "3. Imports Principais": true,
+    "4. Sistema de Sessões": true,
+    "5. Autenticação Operador": true,
+    "6. API Connectivity": true,
+    "7. Endpoints NR12": true,
+    "8. QR Code Flow": true,
+    "9. Checklist Module": true,
+    "10. Filtro Equipamentos": true
+  },
+  "falhas_criticas": [
+    "2. Configurações"
+  ],
+  "status_geral": "REPROVADO"
+}

@@ -1,6 +1,6 @@
 # ===============================================
 # ARQUIVO: mandacaru_bot/bot_main/main.py
-# Loop principal do bot
+# Loop principal do bot - VERSÃO CORRIGIDA
 # ===============================================
 
 import asyncio
@@ -33,27 +33,30 @@ async def create_bot() -> tuple[Bot, Dispatcher]:
     # Criar dispatcher
     dp = Dispatcher()
     
-    # Registrar handlers
+    # Registrar handlers principais
     register_handlers(dp)
     
     # Registrar handlers de checklist
     try:
-        from .handlers import register_checklist_handlers
+        from bot_checklist.handlers import register_handlers as register_checklist_handlers
         register_checklist_handlers(dp)
+        logger.info("✅ Handlers de checklist registrados")
     except Exception as e:
         logger.warning(f"⚠️ Erro ao carregar módulo checklist: {e}")
     
     # Registrar handlers de QR Code
     try:
-        from .handlers import register_qr_handlers
+        from bot_qr.handlers import register_handlers as register_qr_handlers
         register_qr_handlers(dp)
+        logger.info("✅ Handlers de QR Code registrados")
     except Exception as e:
         logger.warning(f"⚠️ Erro ao carregar módulo QR: {e}")
     
     # Registrar handlers de relatórios
     try:
-        from .handlers import register_reports_handlers
+        from bot_reports.handlers import register_handlers as register_reports_handlers
         register_reports_handlers(dp)
+        logger.info("✅ Handlers de relatórios registrados")
     except Exception as e:
         logger.warning(f"⚠️ Erro ao carregar módulo relatórios: {e}")
     

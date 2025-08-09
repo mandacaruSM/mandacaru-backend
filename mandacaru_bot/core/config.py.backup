@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 
+# Carregar .env
 current_dir = Path(__file__).parent
 project_root = current_dir.parent
 env_path = project_root / ".env"
@@ -20,39 +21,41 @@ if not env_path.exists():
 
 load_dotenv(dotenv_path=env_path)
 
+# Configurações principais
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
 API_BASE_URL = os.getenv("API_BASE_URL", f"{BASE_URL}/api")
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
+
+# Configurações de sessão
 SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "24"))
 CLEANUP_INTERVAL_MINUTES = int(os.getenv("CLEANUP_INTERVAL_MINUTES", "60"))
+
+# Configurações de paginação
 ITEMS_PER_PAGE = int(os.getenv("ITEMS_PER_PAGE", "10"))
 MAX_ITEMS_PER_PAGE = int(os.getenv("MAX_ITEMS_PER_PAGE", "50"))
+
+# Configurações de segurança
 MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "3"))
 LOGIN_TIMEOUT_MINUTES = int(os.getenv("LOGIN_TIMEOUT_MINUTES", "15"))
+
+# IDs de administradores
 ADMIN_IDS_STR = os.getenv("ADMIN_IDS", "")
 ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip().isdigit()]
+
+# Configurações de debug
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+# Configurações específicas
 EMPRESA_NOME = os.getenv("EMPRESA_NOME", "Mandacaru ERP")
 EMPRESA_TELEFONE = os.getenv("EMPRESA_TELEFONE", "(11) 99999-9999")
+
+# NR12
 NR12_TEMPO_LIMITE_CHECKLIST = int(os.getenv("NR12_TEMPO_LIMITE_CHECKLIST", "120"))
 NR12_FREQUENCIA_PADRAO = os.getenv("NR12_FREQUENCIA_PADRAO", "DIARIO")
 NR12_NOTIFICAR_ATRASOS = os.getenv("NR12_NOTIFICAR_ATRASOS", "True").lower() in ("true", "1", "yes")
-
-# Variáveis adicionais que podem ser necessárias
-MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "4096"))
-MESSAGE_CHUNK_SIZE = int(os.getenv("MESSAGE_CHUNK_SIZE", "3500"))
-MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "temp/uploads")
-CACHE_ENABLED = os.getenv("CACHE_ENABLED", "True").lower() in ("true", "1", "yes")
-CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
-RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "20"))
-WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", "0.0.0.0")
-WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "8443"))
-LOG_FILE = os.getenv("LOG_FILE", "logs/bot.log")
-DB_FILE = os.getenv("DB_FILE", "data/bot.db")
 
 def validar_configuracoes():
     erros = []
@@ -60,16 +63,34 @@ def validar_configuracoes():
         erros.append("TELEGRAM_BOT_TOKEN deve ser configurado")
     if not API_BASE_URL:
         erros.append("API_BASE_URL é obrigatório")
+    if API_TIMEOUT <= 0:
+        erros.append("API_TIMEOUT deve ser maior que 0")
+    if SESSION_TIMEOUT_HOURS <= 0:
+        erros.append("SESSION_TIMEOUT_HOURS deve ser maior que 0")
     if erros:
-        raise ValueError(f"Erros: {erros}")
+        raise ValueError(f"Erros de configuração:\n" + "\n".join(f"- {erro}" for erro in erros))
     return True
 
 class Config:
     TELEGRAM_TOKEN = TELEGRAM_TOKEN
     API_BASE_URL = API_BASE_URL
+    API_TIMEOUT = API_TIMEOUT
     DEBUG = DEBUG
+    EMPRESA_NOME = EMPRESA_NOME
+    EMPRESA_TELEFONE = EMPRESA_TELEFONE
 
-config = Config()
+class DevelopmentConfig(Config):
+    DEBUG = True
+    LOG_LEVEL = "DEBUG"
+
+class ProductionConfig(Config):
+    DEBUG = False
+    LOG_LEVEL = "INFO"
+
+if ENVIRONMENT.lower() == "production":
+    config = ProductionConfig()
+else:
+    config = DevelopmentConfig()
 
 __all__ = [
     "TELEGRAM_TOKEN", "API_BASE_URL", "API_TIMEOUT",
@@ -79,6 +100,5 @@ __all__ = [
     "ADMIN_IDS", "DEBUG", "LOG_LEVEL",
     "EMPRESA_NOME", "EMPRESA_TELEFONE",
     "NR12_TEMPO_LIMITE_CHECKLIST", "NR12_FREQUENCIA_PADRAO", "NR12_NOTIFICAR_ATRASOS",
-    "config", "validar_configuracoes",
-    "MAX_MESSAGE_LENGTH", "MESSAGE_CHUNK_SIZE", "LOG_FILE", "DB_FILE"
+    "config", "validar_configuracoes"
 ]

@@ -1,5 +1,5 @@
 # ===============================================
-# backend/urls.py - VERSÃO DE EMERGÊNCIA QUE FUNCIONA
+# backend/urls.py - VERSÃO CORRIGIDA E FUNCIONAL
 # ===============================================
 
 from django.contrib import admin
@@ -9,15 +9,6 @@ from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-# Imports para views específicas do bot
-try:
-    from backend.apps.operadores.views_bot import (
-        operador_por_chat_id, operadores_busca, validar_operador_login
-    )
-    BOT_VIEWS_AVAILABLE = True
-except ImportError:
-    BOT_VIEWS_AVAILABLE = False
-
 @csrf_exempt
 def api_root(request):
     """Endpoint raiz da API"""
@@ -26,10 +17,10 @@ def api_root(request):
         'version': '1.0.0',
         'status': 'online',
         'endpoints': {
+            'admin': '/admin/',
             'nr12': '/api/nr12/',
             'equipamentos': '/api/equipamentos/',
             'operadores': '/api/operadores/',
-            'admin': '/admin/',
         }
     })
 
@@ -42,6 +33,10 @@ def app_exists(app_path):
     except ImportError:
         return False
 
+# ===============================================
+# URLs PRINCIPAIS
+# ===============================================
+
 urlpatterns = [
     # Admin (sempre funciona)
     path('admin/', admin.site.urls),
@@ -50,29 +45,16 @@ urlpatterns = [
     path('api/', api_root, name='api-root'),
 ]
 
-# Adicionar URLs específicas do bot se disponíveis
-if BOT_VIEWS_AVAILABLE:
-    urlpatterns += [
-        path('api/operadores/por-chat-id/', operador_por_chat_id, name='operador-por-chat-id-bot'),
-        path('api/operadores/busca/', operadores_busca, name='operadores-busca-bot'),
-        path('api/operadores/validar-login/', validar_operador_login, name='validar-login-bot'),
-    ]
-
-# ================================================================
-# ADICIONAR URLs DOS APPS QUE EXISTEM (COM VERIFICAÇÃO)
-# ================================================================
+# ===============================================
+# ADICIONAR URLs DOS APPS (COM VERIFICAÇÃO)
+# ===============================================
 
 # Tentar adicionar URLs dos apps principais
 apps_to_try = [
-    ('api/operadores/', 'backend.apps.operadores.api_urls'),
-    ('api/equipamentos/', 'backend.apps.equipamentos.urls'),
     ('api/nr12/', 'backend.apps.nr12_checklist.urls'),
-    ('operadores/', 'backend.apps.operadores.urls'),  # views HTML
-]
-
-# Depois tentar adicionar URLs específicas do bot (sem conflito)
-bot_apps_to_try = [
-    ('api/operadores/', 'backend.apps.operadores.urls_bot'),  # bot operadores
+    ('api/equipamentos/', 'backend.apps.equipamentos.urls'), 
+    ('api/operadores/', 'backend.apps.operadores.api_urls'),
+    ('operadores/', 'backend.apps.operadores.urls'),  # views HTML se existir
 ]
 
 for url_prefix, app_urls in apps_to_try:
@@ -86,57 +68,52 @@ for url_prefix, app_urls in apps_to_try:
         print(f"❌ Erro ao incluir {app_urls}: {e}")
         continue
 
-# Adicionar URLs específicas do bot (sem conflito de namespace)
-for url_prefix, app_urls in bot_apps_to_try:
-    try:
-        urlpatterns.append(path(url_prefix, include(app_urls)))
-        print(f"🤖 URLs do bot adicionadas: {url_prefix} -> {app_urls}")
-    except ImportError as e:
-        print(f"⚠️ Bot URLs não encontradas: {app_urls} - {e}")
-        continue
-    except Exception as e:
-        print(f"❌ Erro ao incluir bot URLs {app_urls}: {e}")
-        continue
+# ===============================================
+# TENTAR ADICIONAR URLs ESPECÍFICAS DO BOT
+# ===============================================
 
-# ================================================================
-# APPS ADICIONAIS (OPCIONAIS)
-# ================================================================
-optional_apps = [
-    ('api/auth/', 'backend.apps.authentication'),
-    ('api/dashboard/', 'backend.apps.dashboard'), 
-    ('api/clientes/', 'backend.apps.clientes'),
-    ('api/empreendimentos/', 'backend.apps.empreendimentos'),
-    ('api/almoxarifado/', 'backend.apps.almoxarifado'),
-    ('api/financeiro/', 'backend.apps.financeiro'),
-    ('api/manutencao/', 'backend.apps.manutencao'),
-    ('api/orcamentos/', 'backend.apps.orcamentos'),
-    ('api/ordens-servico/', 'backend.apps.ordens_servico'),
-    ('api/relatorios/', 'backend.apps.relatorios'),
-    ('api/abastecimento/', 'backend.apps.abastecimento'),
-    ('api/fornecedor/', 'backend.apps.fornecedor'),
-]
+# Imports seguros para views do bot
+bot_views_imported = False
+try:
+    from backend.apps.operadores.views_bot import (
+        operador_por_chat_id, operadores_busca, validar_operador_login, atualizar_operador
+    )
+    from backend.apps.nr12_checklist.views_bot import (
+        checklists_bot, equipamentos_operador
+    )
+    from backend.apps.equipamentos.views_bot import (
+        equipamentos_publicos, checklists_equipamento
+    )
+    bot_views_imported = True
+    print("✅ Views do bot importadas com sucesso")
+except ImportError as e:
+    print(f"⚠️ Algumas views do bot não foram encontradas: {e}")
+    bot_views_imported = False
 
-for url_prefix, app_urls in optional_apps:
-    if app_exists(app_urls.replace('.urls', '')):
-        try:
-            urlpatterns.append(path(url_prefix, include(f'{app_urls}.urls')))
-        except Exception:
-            pass
+# Se conseguiu importar as views do bot, adicionar as URLs
+if bot_views_imported:
+    urlpatterns += [
+        # ENDPOINTS ESPECÍFICOS DO BOT TELEGRAM
+        path('api/operadores/por-chat-id/', operador_por_chat_id, name='operador-por-chat-id-bot'),
+        path('api/operadores/busca/', operadores_busca, name='operadores-busca-bot'), 
+        path('api/operadores/validar-login/', validar_operador_login, name='validar-login-bot'),
+        path('api/operadores/<int:operador_id>/', atualizar_operador, name='atualizar-operador-bot'),
+        
+        path('api/checklists/', checklists_bot, name='checklists-bot'),
+        path('api/nr12/checklists/', checklists_bot, name='nr12-checklists-bot'),
+        path('api/operadores/<int:operador_id>/equipamentos/', equipamentos_operador, name='operador-equipamentos-bot'),
+        
+        path('api/equipamentos/', equipamentos_publicos, name='equipamentos-publicos-bot'),
+        path('api/equipamentos/<int:equipamento_id>/checklists/', checklists_equipamento, name='equipamento-checklists-bot'),
+    ]
+    print("🤖 URLs específicas do bot adicionadas")
 
-# ================================================================
+# ===============================================
 # ARQUIVOS ESTÁTICOS (DESENVOLVIMENTO)
-# ================================================================
+# ===============================================
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-# ================================================================
-# RESUMO DOS ENDPOINTS ESPERADOS:
-# ================================================================
-# /admin/                    - Django Admin
-# /api/                      - API Root (informações do sistema)
-# /api/operadores/           - APIs de operadores  
-# /api/equipamentos/         - APIs de equipamentos
-# /api/nr12/                 - APIs de checklist NR12
-# /operadores/               - Views HTML de operadores
-# + outros apps opcionais conforme disponibilidade
+print(f"📊 Total de URLs registradas: {len(urlpatterns)}")

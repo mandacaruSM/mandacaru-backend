@@ -350,5 +350,64 @@ async def validar_operador(nome: str, data_nascimento: str) -> Optional[Dict[str
             logger.warning(f"⚠️ Formato de data inválido: {data_nascimento}")
             return None
     
+
+# FUNÇÕES NR12 (ADICIONADAS)
+async def buscar_equipamentos_com_nr12(operador_id=None):
+    try:
+        url = '/equipamentos/'
+        params = {'tem_nr12': True}
+        if operador_id:
+            params['operador_id'] = operador_id
+        data = await fazer_requisicao_api('GET', url, params=params)
+        return data.get('results', []) if data else []
+    except Exception as e:
+        logger.error(f'Erro ao buscar equipamentos NR12: {e}')
+        return []
+
+async def buscar_checklists_nr12(equipamento_id=None, operador_id=None, status=None):
+    try:
+        url = '/nr12/checklists/'
+        params = {}
+        if equipamento_id: params['equipamento'] = equipamento_id
+        if operador_id: params['operador_id'] = operador_id
+        if status: params['status'] = status
+        data = await fazer_requisicao_api('GET', url, params=params)
+        return data.get('results', []) if data else []
+    except Exception as e:
+        logger.error(f'Erro ao buscar checklists: {e}')
+        return []
+
+async def criar_checklist_nr12(dados):
+    try:
+        data = await fazer_requisicao_api('POST', '/nr12/checklists/', json=dados)
+        return data
+    except Exception as e:
+        logger.error(f'Erro ao criar checklist: {e}')
+        return None
+
+async def buscar_itens_checklist_nr12(checklist_id):
+    try:
+        data = await fazer_requisicao_api('GET', f'/nr12/checklists/{checklist_id}/itens/')
+        return data.get('results', []) if data else []
+    except Exception as e:
+        logger.error(f'Erro ao buscar itens: {e}')
+        return []
+
+async def atualizar_item_checklist_nr12(item_id, resposta_data):
+    try:
+        await fazer_requisicao_api('PATCH', f'/nr12/itens-checklist/{item_id}/', json=resposta_data)
+        return True
+    except Exception as e:
+        logger.error(f'Erro ao atualizar item: {e}')
+        return False
+
+async def finalizar_checklist_nr12(checklist_id):
+    try:
+        data = await fazer_requisicao_api('POST', f'/nr12/checklists/{checklist_id}/finalizar/', json={})
+        return data
+    except Exception as e:
+        logger.error(f'Erro ao finalizar: {e}')
+        return None
+
     logger.info(f"✅ Operador {nome} validado com sucesso")
     return operador
