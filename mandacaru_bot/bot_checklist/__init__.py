@@ -1,6 +1,6 @@
 # ===============================================
 # ARQUIVO: mandacaru_bot/bot_checklist/__init__.py
-# Inicialização do módulo checklist
+# Inicialização do módulo checklist - CORRIGIDO
 # ===============================================
 
 """
@@ -21,9 +21,9 @@ Funcionalidades:
 __version__ = "2.0.0"
 __author__ = "Mandacaru ERP"
 
-# Importar principais classes e funções
-from .handlers import register_handlers
+# COMENTAR ESTA LINHA QUE ESTÁ CAUSANDO ERRO:
+# from .handlers import register_handlers
 
-__all__ = [
-    'register_handlers'
-]
+# __all__ = [
+#     'register_handlers'
+# ]

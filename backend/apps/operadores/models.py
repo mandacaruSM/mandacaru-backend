@@ -330,86 +330,177 @@ class Operador(models.Model):
         return qr_data
     
     def get_equipamentos_disponiveis(self):
-        """Retorna equipamentos que este operador pode usar"""
+    
         from backend.apps.equipamentos.models import Equipamento
+    
+        # Conjunto para evitar duplicatas
+        equipamentos_ids = set()
         
+        # 1. Equipamentos diretamente autorizados
         if self.equipamentos_autorizados.exists():
-            return self.equipamentos_autorizados.filter(ativo_nr12=True)
+            equipamentos_ids.update(
+                self.equipamentos_autorizados.filter(ativo_nr12=True).values_list('id', flat=True)
+            )
+        
+        # 2. Equipamentos dos clientes autorizados
         elif self.clientes_autorizados.exists():
-            return Equipamento.objects.filter(
-                cliente__in=self.clientes_autorizados.all(), 
-                ativo_nr12=True
+            equipamentos_ids.update(
+                Equipamento.objects.filter(
+                    cliente__in=self.clientes_autorizados.all(), 
+                    ativo_nr12=True
+                ).values_list('id', flat=True)
             )
-        else:
-            # Se não tem restrições específicas, pode acessar todos
-            return Equipamento.objects.filter(ativo_nr12=True)
-
-    def pode_operar_equipamento(self, equipamento):
-        """Verifica se pode operar equipamento específico"""
-        if not (self.ativo_bot and self.status == 'ATIVO'):
-            return False
         
-        equipamentos_disponiveis = self.get_equipamentos_disponiveis()
-        return equipamento in equipamentos_disponiveis
-
-    def get_checklists_hoje(self):
-        """Retorna checklists pendentes para hoje"""
-        from backend.apps.nr12_checklist.models import ChecklistNR12
-        from datetime import date
+        # 3. ✅ NOVO: Equipamentos dos operadores supervisionados (se é supervisor)
+        if self.operadores_supervisionados.exists():
+            for operador_supervisionado in self.operadores_supervisionados.filter(
+                status='ATIVO', 
+                ativo_bot=True
+            ):
+                # Equipamentos diretos do supervisionado
+                if operador_supervisionado.equipamentos_autorizados.exists():
+                    equipamentos_ids.update(
+                        operador_supervisionado.equipamentos_autorizados.filter(
+                            ativo_nr12=True
+                        ).values_list('id', flat=True)
+                    )
+                
+                # Equipamentos dos clientes do supervisionado
+                elif operador_supervisionado.clientes_autorizados.exists():
+                    equipamentos_ids.update(
+                        Equipamento.objects.filter(
+                            cliente__in=operador_supervisionado.clientes_autorizados.all(),
+                            ativo_nr12=True
+                        ).values_list('id', flat=True)
+                    )
         
-        return ChecklistNR12.objects.filter(
-            equipamento__in=self.get_equipamentos_disponiveis(),
-            data_checklist=date.today(),
-            status__in=['PENDENTE', 'EM_ANDAMENTO']
-        )
-
-    def pode_iniciar_checklist(self, checklist_id):
-        """Verifica se pode iniciar checklist específico"""
-        try:
-            from backend.apps.nr12_checklist.models import ChecklistNR12
-            checklist = ChecklistNR12.objects.get(id=checklist_id)
-            
-            return (
-                checklist.equipamento in self.get_equipamentos_disponiveis() 
-                and checklist.status == 'PENDENTE'
-                and self.pode_fazer_checklist
+        # 4. Se não tem restrições específicas e não é supervisor, pode acessar todos
+        if not equipamentos_ids and not self.operadores_supervisionados.exists():
+            equipamentos_ids.update(
+                Equipamento.objects.filter(ativo_nr12=True).values_list('id', flat=True)
             )
-        except ChecklistNR12.DoesNotExist:
-            return False
+        
+        # Retornar QuerySet final
+        return Equipamento.objects.filter(id__in=equipamentos_ids, ativo_nr12=True).order_by('nome')
 
-    def pode_finalizar_checklist(self, checklist_id):
-        """Verifica se pode finalizar checklist específico"""
-        try:
-            from backend.apps.nr12_checklist.models import ChecklistNR12
-            checklist = ChecklistNR12.objects.get(id=checklist_id)
-            
-            return (
-                checklist.equipamento in self.get_equipamentos_disponiveis()
-                and checklist.status == 'EM_ANDAMENTO'
-                and self.pode_fazer_checklist
-                and (checklist.responsavel == self.user or not checklist.responsavel)
-            )
-        except ChecklistNR12.DoesNotExist:
-            return False
 
     def atualizar_ultimo_acesso(self, chat_id=None):
-        """Atualiza último acesso ao bot"""
+        """
+        Atualiza último acesso ao bot
+        CORRIGIDO: Garante atualização correta do chat_id
+        """
         from django.utils import timezone
+        
+        # Sempre atualizar último acesso
         self.ultimo_acesso_bot = timezone.now()
-        if chat_id and chat_id != self.chat_id_telegram:
+        
+        # Atualizar chat_id se fornecido e diferente do atual
+        if chat_id and str(chat_id) != str(self.chat_id_telegram):
             self.chat_id_telegram = str(chat_id)
+            # Log da atualização para auditoria
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"✅ Chat ID atualizado para operador {self.codigo}: {chat_id}")
+        
+        # Salvar apenas os campos necessários
         self.save(update_fields=['ultimo_acesso_bot', 'chat_id_telegram'])
 
+
+    def pode_iniciar_checklist(self, checklist_id):
+        """
+        Verifica se pode iniciar checklist específico
+        CORRIGIDO: Usa novo método get_equipamentos_disponiveis
+        """
+        try:
+            from backend.apps.nr12_checklist.models import ChecklistNR12
+            checklist = ChecklistNR12.objects.get(id=checklist_id)
+            
+            # Verificar se operador pode fazer checklist
+            if not self.pode_fazer_checklist:
+                return False
+            
+            # Verificar se operador está ativo
+            if not (self.ativo_bot and self.status == 'ATIVO'):
+                return False
+            
+            # Verificar se checklist está pendente
+            if checklist.status != 'PENDENTE':
+                return False
+            
+            # Verificar se operador tem acesso ao equipamento
+            equipamentos_disponiveis = self.get_equipamentos_disponiveis()
+            return checklist.equipamento in equipamentos_disponiveis
+            
+        except ChecklistNR12.DoesNotExist:
+            return False
+
+
+    def pode_finalizar_checklist(self, checklist_id):
+        """
+        Verifica se pode finalizar checklist específico
+        CORRIGIDO: Inclui verificação de responsável
+        """
+        try:
+            from backend.apps.nr12_checklist.models import ChecklistNR12
+            checklist = ChecklistNR12.objects.get(id=checklist_id)
+            
+            # Verificar permissões básicas
+            if not (self.pode_fazer_checklist and self.ativo_bot and self.status == 'ATIVO'):
+                return False
+            
+            # Verificar se checklist está em andamento
+            if checklist.status != 'EM_ANDAMENTO':
+                return False
+            
+            # Verificar se operador tem acesso ao equipamento
+            equipamentos_disponiveis = self.get_equipamentos_disponiveis()
+            if checklist.equipamento not in equipamentos_disponiveis:
+                return False
+            
+            # Verificar se é o responsável pelo checklist ou se não há responsável definido
+            if checklist.responsavel and checklist.responsavel != self.user:
+                # Se há responsável definido, só ele pode finalizar
+                # A menos que seja supervisor do responsável
+                if hasattr(checklist.responsavel, 'operador'):
+                    responsavel_operador = checklist.responsavel.operador
+                    if responsavel_operador.supervisor != self:
+                        return False
+                else:
+                    return False
+            
+            return True
+            
+        except ChecklistNR12.DoesNotExist:
+            return False
+
+
     def get_resumo_para_bot(self):
-        """Retorna resumo do operador para o bot"""
+        """
+        Retorna resumo do operador para o bot
+        CORRIGIDO: Inclui informações de supervisão
+        """
         equipamentos = self.get_equipamentos_disponiveis()
         checklists_hoje = self.get_checklists_hoje()
+        
+        # Informações de supervisão
+        supervisionados_info = []
+        if self.operadores_supervisionados.exists():
+            for supervisionado in self.operadores_supervisionados.filter(status='ATIVO'):
+                supervisionados_info.append({
+                    'id': supervisionado.id,
+                    'nome': supervisionado.nome,
+                    'codigo': supervisionado.codigo,
+                    'equipamentos_count': supervisionado.get_equipamentos_disponiveis().count()
+                })
         
         return {
             'codigo': self.codigo,
             'nome': self.nome,
             'funcao': self.funcao,
             'setor': self.setor,
+            'is_supervisor': self.operadores_supervisionados.exists(),
+            'supervisor_nome': self.supervisor.nome if self.supervisor else None,
+            'supervisionados': supervisionados_info,
             'permissoes': {
                 'pode_fazer_checklist': self.pode_fazer_checklist,
                 'pode_registrar_abastecimento': self.pode_registrar_abastecimento,
@@ -421,15 +512,17 @@ class Operador(models.Model):
                     'id': eq.id,
                     'codigo': eq.codigo,
                     'nome': eq.nome,
-                    'status': eq.status_operacional
-                } for eq in equipamentos[:10]  # Limitar para não sobrecarregar
+                    'status': eq.status_operacional,
+                    'cliente': eq.cliente.nome if eq.cliente else 'N/A'
+                } for eq in equipamentos[:15]  # Aumentar limite para supervisores
             ],
             'checklists_pendentes': checklists_hoje.count(),
             'ultimo_equipamento': {
                 'id': self.ultimo_equipamento_usado.id,
                 'nome': self.ultimo_equipamento_usado.nome,
                 'codigo': self.ultimo_equipamento_usado.codigo
-            } if self.ultimo_equipamento_usado else None
+            } if self.ultimo_equipamento_usado else None,
+            'ultimo_acesso': self.ultimo_acesso_bot.isoformat() if self.ultimo_acesso_bot else None
         }
 
     @property

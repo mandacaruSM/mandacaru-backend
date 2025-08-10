@@ -30,6 +30,31 @@ from core.middleware import require_auth
 
 logger = logging.getLogger(__name__)
 
+# ===[MEUS CHECKLISTS | CONSTS & TYPES]===========================
+from aiogram import F
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+
+CALLBACK_MEUS_PREFIX = "chk_meus"
+PAGE_SIZE = 10
+
+def _cb_meus(page: int) -> str:
+    return f"{CALLBACK_MEUS_PREFIX}:{page}"
+
+def _paginador_inline(page: int, has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
+    rows = []
+    nav = []
+    if has_prev:
+        nav.append(InlineKeyboardButton(text="⬅️ Anterior", callback_data=_cb_meus(page-1)))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="Próximo ➡️", callback_data=_cb_meus(page+1)))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="◀️ Voltar", callback_data="checklist_menu")])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+# ===============================================================
+
+
 # ===============================================
 # ESTADOS FSM PARA CHECKLIST
 # ===============================================
@@ -170,6 +195,70 @@ async def mostrar_meus_checklists(message: Message, operador: dict):
         logger.error(f"Erro ao mostrar meus checklists: {e}")
         await message.answer("❌ Erro ao carregar seus checklists.")
 
+    fake_cb = type("CB", (), {"message": message, "from_user": message.from_user, "data": _cb_meus(1)})()
+    await cb_listar_meus_checklists(fake_cb)
+    return
+
+
+# === LISTAGEM PAGINADA: callback chk_meus:<page> =================
+async def cb_listar_meus_checklists(callback: CallbackQuery):
+    try:
+        chat_id = str(callback.from_user.id)
+        operador = await obter_operador_sessao(chat_id)
+        if not operador:
+            await callback.answer("🔒 Sessão expirada. Use /start.")
+            return
+
+        # página atual
+        try:
+            _, page_str = callback.data.split(":")
+            page = max(1, int(page_str))
+        except Exception:
+            page = 1
+
+        # busca TODOS os checklists do operador (paginação local)
+        operador_id = operador.get('id')
+        all_checklists = await buscar_checklists_nr12(operador_id=operador_id)
+        total = len(all_checklists)
+
+        # fatia
+        ini = (page - 1) * PAGE_SIZE
+        fim = ini + PAGE_SIZE
+        results = all_checklists[ini:fim]
+
+        has_prev = page > 1
+        has_next = fim < total
+
+        if total == 0:
+            texto = "📋 **Meus Checklists**\n\n📭 Você ainda não possui checklists."
+            await callback.message.edit_text(
+                texto, reply_markup=_paginador_inline(page, has_prev, has_next), parse_mode='Markdown'
+            )
+            return
+
+        linhas = []
+        for c in results:
+            status_emoji = {
+                'PENDENTE': '🟡', 'EM_ANDAMENTO': '🔵', 'CONCLUIDO': '✅', 'CANCELADO': '❌'
+            }.get(c.get('status', ''), '❓')
+            equip = c.get('equipamento_nome') or 'Equipamento'
+            data_str = c.get('data_checklist') or c.get('created_at') or '—'
+            linhas.append(f"{status_emoji} **{equip}**\n   📅 {data_str}\n   📊 {c.get('status','—')}")
+
+        cab = f"📋 **Meus Checklists** (pág. {page})\nTotal: {total}\n\n"
+        texto = cab + "\n\n".join(linhas)
+
+        await callback.message.edit_text(
+            texto,
+            reply_markup=_paginador_inline(page, has_prev, has_next),
+            parse_mode='Markdown',
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        logger.error(f"Erro em cb_listar_meus_checklists: {e}")
+        await callback.answer("❌ Erro ao listar checklists")
+
 # ===============================================
 # HANDLER DE CALLBACKS
 # ===============================================
@@ -191,7 +280,9 @@ async def handle_checklist_callback(callback: CallbackQuery, state: FSMContext):
             await mostrar_menu_checklist(callback.message, operador)
             
         elif data == "checklist_meus":
-            await mostrar_meus_checklists(callback.message, operador)
+            # dispara página 1 da listagem paginada
+            fake_cb = type("CB", (), {"message": callback.message, "from_user": callback.from_user, "data": _cb_meus(1)})()
+            await cb_listar_meus_checklists(fake_cb)
             
         elif data == "checklist_equipamentos":
             await mostrar_equipamentos_checklist(callback.message, operador)
@@ -455,7 +546,7 @@ def calcular_turno_atual() -> str:
 # REGISTRO DOS HANDLERS
 # ===============================================
 
-def register_handlers(dp: Dispatcher):
+def register_checklist_handlers(dp: Dispatcher):
     """Registra todos os handlers do módulo checklist"""
     
     # Comando principal
@@ -489,6 +580,12 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(
         handle_checklist_callback,
         F.data == "pausar_checklist"
+    )
+
+    # Listagem paginada "Meus Checklists"
+    dp.callback_query.register(
+        cb_listar_meus_checklists,
+        F.data.startswith(CALLBACK_MEUS_PREFIX)
     )
     
     logger.info("✅ Handlers de checklist registrados com sucesso")

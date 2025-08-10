@@ -1,6 +1,6 @@
 # ===============================================
 # ARQUIVO: mandacaru_bot/bot_main/handlers.py
-# Handlers principais do bot
+# Handlers principais do bot - TODAS AS CORREÇÕES APLICADAS
 # ===============================================
 
 import logging
@@ -36,6 +36,25 @@ class AuthStates(StatesGroup):
     waiting_for_birth_date = State()
 
 # ===============================================
+# KEYBOARDS INLINE
+# ===============================================
+
+def criar_menu_principal():
+    """Cria keyboard do menu principal"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
+        [InlineKeyboardButton(text="🔧 Equipamentos", callback_data="list_equipamentos")],
+        [InlineKeyboardButton(text="📱 Escanear QR", callback_data="scan_qr")],
+        [InlineKeyboardButton(text="📊 Relatórios", callback_data="menu_reports")]
+    ])
+
+def criar_keyboard_voltar():
+    """Cria keyboard simples de voltar"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
+    ])
+
+# ===============================================
 # MIDDLEWARE DE AUTENTICAÇÃO
 # ===============================================
 
@@ -53,7 +72,7 @@ def require_auth(handler):
         
         # Verificar autenticação
         if not verificar_autenticacao(chat_id):
-            await obj.answer(MessageTemplates.unauthorized_access())
+            await obj.answer("❌ Você precisa estar logado para usar esta funcionalidade.\n\nDigite /start para fazer login.")
             return
         
         # Adicionar operador aos argumentos
@@ -64,141 +83,81 @@ def require_auth(handler):
     
     return wrapper
 
-@require_auth
-async def mostrar_menu_checklists(message: Message, operador=None):
-    """Mostra menu de checklists"""
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
-        [InlineKeyboardButton(text="🔍 Buscar por QR", callback_data="scan_qr")],
-        [InlineKeyboardButton(text="🏠 Voltar", callback_data="menu_refresh")]
-    ])
-    
-    texto = "📋 **Menu de Checklists**\n\nEscolha uma opção:"
-    
-    try:
-        await message.edit_text(texto, reply_markup=keyboard)
-    except:
-        await message.answer(texto, reply_markup=keyboard)
-
-@require_auth
-async def mostrar_menu_equipamentos(message: Message, operador=None):
-    """Mostra menu de equipamentos"""
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚜 Listar Equipamentos", callback_data="list_equipamentos")],
-        [InlineKeyboardButton(text="🔍 Buscar por QR", callback_data="scan_qr")],
-        [InlineKeyboardButton(text="🏠 Voltar", callback_data="menu_refresh")]
-    ])
-    
-    texto = "🚜 **Menu de Equipamentos**\n\nEscolha uma opção:"
-    
-    try:
-        await message.edit_text(texto, reply_markup=keyboard)
-    except:
-        await message.answer(texto, reply_markup=keyboard)
-
-        
 # ===============================================
-# HANDLERS DE COMANDO
+# HANDLERS PRINCIPAIS
 # ===============================================
 
 async def start_handler(message: Message, state: FSMContext):
-    """Handler do comando /start"""
-    chat_id = str(message.chat.id)
-    
+    """Handler do comando /start - CORRIGIDO"""
     try:
-        # Limpar estado anterior se existir
-        await state.clear()
+        chat_id = str(message.chat.id)
         
-        # Verificar se há parâmetro no comando (QR Code)
-        comando_completo = message.text.strip()
-        
-        # Tentar processar QR Code primeiro
-        from bot_qr.handlers import processar_qr_code_start
-        qr_processado = await processar_qr_code_start(message, comando_completo)
-        
-        if qr_processado:
-            # QR Code foi processado com sucesso
-            return
-        
-        # Verificar se o usuário já está autenticado
+        # Verificar se usuário já está autenticado
         if verificar_autenticacao(chat_id):
             operador = obter_operador_sessao(chat_id)
-            await mostrar_menu_principal(message, operador['nome'])
-            return
-        
-        # Verificar se já existe operador com este chat_id
-        operador_existente = await buscar_operador_por_chat_id(chat_id)
-        if operador_existente:
-            # Autenticar automaticamente
-            autenticar_operador(chat_id, operador_existente)
-            await message.answer(MessageTemplates.auth_success(operador_existente['nome']))
-            await mostrar_menu_principal(message, operador_existente['nome'])
-            return
-        
-        # Iniciar processo de autenticação
-        await iniciar_processo_login(message, state)
+            nome = operador.get('nome', 'Operador') if operador else 'Usuário'
+            
+            # CORRIGIDO: Mensagem direta ao invés de método inexistente
+            await message.answer(
+                f"🎉 **Bem-vindo de volta, {nome}!**\n\nVocê está logado com sucesso.\nSelecione uma opção:",
+                reply_markup=criar_menu_principal()
+            )
+        else:
+            # Tentar autenticação por chat_id
+            operador = await buscar_operador_por_chat_id(chat_id)
+            
+            if operador:
+                # Autenticar automaticamente - CORRIGIDO: removido terceiro argumento
+                autenticar_operador(chat_id, operador)
+                await message.answer(
+                    f"🎉 **Bem-vindo de volta, {operador['nome']}!**\n\nLogin automático realizado.\nSelecione uma opção:",
+                    reply_markup=criar_menu_principal()
+                )
+            else:
+                # Solicitar autenticação - CORRIGIDO: Mensagens diretas
+                await message.answer("🤖 **Bem-vindo ao Mandacaru Bot!**\n\nPara usar o sistema, você precisa se identificar.")
+                await message.answer("👤 **Identificação**\n\nDigite seu nome completo (nome e sobrenome):")
+                await state.set_state(AuthStates.waiting_for_name)
         
     except Exception as e:
-        logger.error(f"❌ Erro em start_handler: {e}")
-        await message.answer(MessageTemplates.error_generic())
-
-async def iniciar_processo_login(message: Message, state: FSMContext):
-    """Inicia o processo de login"""
-    chat_id = str(message.chat.id)
-    
-    # Iniciar sessão
-    iniciar_sessao(chat_id)
-    
-    # Enviar mensagem de boas-vindas
-    await message.answer(MessageTemplates.welcome_message())
-    
-    # Definir estado para aguardar nome
-    await state.set_state(AuthStates.waiting_for_name)
+        logger.error(f"❌ Erro no comando start: {e}")
+        await message.answer("❌ Erro interno do sistema. Tente novamente em alguns instantes.")
 
 async def processar_nome_operador(message: Message, state: FSMContext):
-    """Processa o nome do operador"""
-    chat_id = str(message.chat.id)
-    nome = message.text.strip()
-    
+    """Processa o nome do operador - CORRIGIDO"""
     try:
-        # Validar formato do nome
-        if not Validators.validar_nome(nome):
+        nome = message.text.strip()
+        
+        # Validação básica do nome
+        if len(nome) < 3 or len(nome.split()) < 2:
             await message.answer("❌ **Nome Inválido**\n\nDigite seu nome completo (nome e sobrenome):")
             return
         
-        # Buscar operador na API
+        # Buscar operador por nome
         operador = await buscar_operador_por_nome(nome)
         
         if not operador:
-            await message.answer(MessageTemplates.operator_not_found())
-            await state.set_state(AuthStates.waiting_for_name)
+            await message.answer("❌ **Operador não encontrado**\n\nVerifique se o nome está correto e tente novamente.\n\nDigite seu nome completo:")
             return
         
-        # Salvar dados do operador temporariamente
-        await state.update_data(operador_encontrado=operador)
-        
-        # Verificar se tem data de nascimento cadastrada
-        if operador.get('data_nascimento'):
-            await message.answer(MessageTemplates.auth_birth_date_request())
-            await state.set_state(AuthStates.waiting_for_birth_date)
-        else:
-            # Se não tem data cadastrada, autenticar direto
-            await finalizar_autenticacao(message, state, operador)
+        # Salvar operador encontrado
+        await state.update_data(operador=operador)
+        await message.answer("📅 **Confirmação de Identidade**\n\nDigite sua data de nascimento no formato DD/MM/AAAA:")
+        await state.set_state(AuthStates.waiting_for_birth_date)
         
     except Exception as e:
         logger.error(f"❌ Erro ao processar nome: {e}")
-        await message.answer(MessageTemplates.error_api_connection())
+        await message.answer("❌ Erro de conexão. Tente novamente.")
+        await state.clear()
 
 async def processar_data_nascimento(message: Message, state: FSMContext):
-    """Processa a data de nascimento"""
-    data_texto = message.text.strip()
-    
+    """Processa a data de nascimento para autenticação - CORRIGIDO"""
     try:
-        # Obter dados salvos
-        data = await state.get_data()
-        operador = data.get('operador_encontrado')
+        data_texto = message.text.strip()
+        
+        # Obter dados do estado
+        state_data = await state.get_data()
+        operador = state_data.get('operador')
         
         if not operador:
             await message.answer("❌ Erro interno. Digite /start para recomeçar.")
@@ -206,321 +165,203 @@ async def processar_data_nascimento(message: Message, state: FSMContext):
             return
         
         # Validar operador com data de nascimento
-        operador_validado = await validar_operador(operador['nome'], data_texto)
-        
-        if operador_validado:
-            await finalizar_autenticacao(message, state, operador_validado)
+        if await validar_operador(operador['codigo'], data_texto):
+            chat_id = str(message.chat.id)
+            
+            # Autenticar operador - CORRIGIDO: removido terceiro argumento
+            autenticar_operador(chat_id, operador)
+            
+            # Atualizar chat_id no backend
+            await atualizar_chat_id_operador(operador['id'], chat_id)
+            
+            await message.answer(
+                f"✅ **Autenticação realizada com sucesso!**\n\nBem-vindo, {operador['nome']}!\n\nSelecione uma opção:",
+                reply_markup=criar_menu_principal()
+            )
+            await state.clear()
         else:
-            await message.answer(MessageTemplates.auth_failed())
+            await message.answer("❌ **Data de nascimento incorreta**\n\nTente novamente ou digite /start para recomeçar.")
             await state.clear()
         
     except Exception as e:
-        logger.error(f"❌ Erro ao processar data: {e}")
-        await message.answer(MessageTemplates.error_generic())
-
-async def finalizar_autenticacao(message: Message, state: FSMContext, operador: dict):
-    """Finaliza o processo de autenticação"""
-    chat_id = str(message.chat.id)
-    
-    try:
-        # Atualizar chat_id no sistema
-        await atualizar_chat_id_operador(operador['id'], chat_id)
-        
-        # Autenticar na sessão
-        autenticar_operador(chat_id, operador)
-        
-        # Mensagem de sucesso
-        await message.answer(MessageTemplates.auth_success(operador['nome']))
-        
-        # Verificar se há equipamento pendente (UUID salvo de QR Code)
-        from core.session import obter_dados_temporarios
-        equipamento_uuid = obter_dados_temporarios(chat_id, 'equipamento_uuid_pendente')
-        
-        if equipamento_uuid:
-            # Processar equipamento que estava pendente
-            from bot_qr.handlers import processar_qr_equipamento
-            await processar_qr_equipamento(message, equipamento_uuid)
-        else:
-            await mostrar_menu_principal(message, operador['nome'])
-        
-        # Limpar estado
+        logger.error(f"❌ Erro ao processar data de nascimento: {e}")
+        await message.answer("❌ Erro interno. Digite /start para recomeçar.")
         await state.clear()
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao finalizar autenticação: {e}")
-        await message.answer(MessageTemplates.error_generic())
 
-# ===============================================
-# MENU PRINCIPAL
-# ===============================================
-
-# ===============================================
-# CORREÇÃO: Substitua a função mostrar_menu_principal
-# no arquivo mandacaru_bot/bot_main/handlers.py
-# ===============================================
-
-async def mostrar_menu_principal(message: Message, operador_nome: str):
-    """Mostra o menu principal com botões funcionais"""
-    
-    # Criar keyboard inline
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📋 Checklists", callback_data="menu_checklists"),
-            InlineKeyboardButton(text="🚜 Equipamentos", callback_data="menu_equipamentos")
-        ],
-        [
-            InlineKeyboardButton(text="❓ Ajuda", callback_data="menu_help"),
-            InlineKeyboardButton(text="⚙️ Atualizar", callback_data="menu_refresh")
-        ]
-    ])
-    
-    texto = MessageTemplates.main_menu(operador_nome)
-    
+@require_auth
+async def callback_handler(callback: CallbackQuery, operador=None):
+    """Handler principal para callbacks do menu - CORRIGIDO"""
     try:
-        # Tentar editar mensagem existente
-        await message.edit_text(texto, reply_markup=keyboard)
-    except:
-        # Se não conseguir editar, enviar nova mensagem
-        await message.answer(texto, reply_markup=keyboard)
-
-# ===============================================
-# CORREÇÃO: Atualize também a função callback_handler
-# ===============================================
-
-async def callback_handler(callback: CallbackQuery):
-    """Handler geral para callbacks"""
-    data = callback.data
-    chat_id = str(callback.message.chat.id)
-    
-    try:
-        await callback.answer()  # Confirmar callback
+        await callback.answer()
+        data = callback.data
         
         if data == "menu_refresh":
-            if verificar_autenticacao(chat_id):
-                operador = obter_operador_sessao(chat_id)
-                await mostrar_menu_principal(callback.message, operador['nome'])
-            else:
-                await callback.message.edit_text(MessageTemplates.unauthorized_access())
-                
+            await callback.message.edit_text(
+                f"🏠 **Menu Principal**\n\nOlá, {operador['nome']}!\n\nSelecione uma opção:",
+                reply_markup=criar_menu_principal()
+            )
+        
         elif data == "menu_checklists":
-            await mostrar_menu_checklists(callback.message)
-            
-        elif data == "menu_equipamentos":
-            await mostrar_menu_equipamentos(callback.message)
-            
-        elif data == "menu_help":
-            await callback.message.edit_text(MessageTemplates.help_message())
-            
-    except Exception as e:
-        logger.error(f"❌ Erro no callback: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-# ===============================================
-# ADICIONE também estas funções se não existirem:
-# ===============================================
-
-def require_auth(handler):
-    """Decorator que exige autenticação"""
-    async def wrapper(obj, *args, **kwargs):
-        # Determinar chat_id baseado no tipo de objeto
-        if hasattr(obj, 'chat'):
-            chat_id = str(obj.chat.id)
-        elif hasattr(obj, 'message') and hasattr(obj.message, 'chat'):
-            chat_id = str(obj.message.chat.id)
+            await callback.message.edit_text(
+                "📋 **Menu de Checklists**\n\nEscolha uma opção:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
+                    [InlineKeyboardButton(text="🔧 Por Equipamento", callback_data="list_equipamentos")],
+                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="menu_refresh")]
+                ])
+            )
+        
+        elif data == "menu_reports":
+            await callback.message.edit_text(
+                "📊 **Menu de Relatórios**\n\nEscolha uma opção:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📊 Meus Relatórios", callback_data="my_reports")],
+                    [InlineKeyboardButton(text="📈 Estatísticas", callback_data="stats_reports")],
+                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="menu_refresh")]
+                ])
+            )
+        
+        elif data == "list_equipamentos":
+            # Redirecionar para handler de equipamentos no módulo checklist
+            try:
+                from bot_checklist.handlers import listar_equipamentos_handler
+                await listar_equipamentos_handler(callback, operador=operador)
+            except ImportError:
+                await callback.message.edit_text(
+                    "⚠️ **Módulo de Equipamentos Indisponível**\n\nEsta funcionalidade está em manutenção.",
+                    reply_markup=criar_keyboard_voltar()
+                )
+        
+        elif data == "list_checklists":
+            # Redirecionar para handler de checklists no módulo checklist
+            try:
+                from bot_checklist.handlers import listar_checklists_handler
+                await listar_checklists_handler(callback, operador=operador)
+            except ImportError:
+                await callback.message.edit_text(
+                    "⚠️ **Módulo de Checklists Indisponível**\n\nEsta funcionalidade está em manutenção.",
+                    reply_markup=criar_keyboard_voltar()
+                )
+        
+        elif data == "scan_qr":
+            await callback.message.edit_text(
+                "📱 **Escanear QR Code**\n\n"
+                "Para escanear um QR Code de equipamento:\n\n"
+                "1️⃣ Abra a câmera do seu celular\n"
+                "2️⃣ Aponte para o QR Code\n"
+                "3️⃣ Toque no link que aparecer\n"
+                "4️⃣ O Telegram abrirá automaticamente\n\n"
+                "💡 O QR Code geralmente está na plaqueta do equipamento.",
+                reply_markup=criar_keyboard_voltar()
+            )
+        
         else:
-            logger.error("❌ Não foi possível determinar chat_id")
-            return
+            await callback.message.edit_text(
+                "⚙️ **Funcionalidade em Desenvolvimento**\n\nEsta opção estará disponível em breve.",
+                reply_markup=criar_keyboard_voltar()
+            )
         
-        # Verificar autenticação
-        if not verificar_autenticacao(chat_id):
-            await obj.answer(MessageTemplates.unauthorized_access())
-            return
-        
-        # Adicionar operador aos argumentos
-        operador = obter_operador_sessao(chat_id)
-        kwargs['operador'] = operador
-        
-        return await handler(obj, *args, **kwargs)
-    
-    return wrapper
-
-@require_auth
-async def mostrar_menu_checklists(message: Message, operador=None):
-    """Mostra menu de checklists"""
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
-        [InlineKeyboardButton(text="🔍 Buscar por QR", callback_data="scan_qr")],
-        [InlineKeyboardButton(text="🏠 Voltar", callback_data="menu_refresh")]
-    ])
-    
-    texto = "📋 **Menu de Checklists**\n\nEscolha uma opção:"
-    
-    try:
-        await message.edit_text(texto, reply_markup=keyboard)
-    except:
-        await message.answer(texto, reply_markup=keyboard)
-
-@require_auth
-async def mostrar_menu_equipamentos(message: Message, operador=None):
-    """Mostra menu de equipamentos"""
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚜 Listar Equipamentos", callback_data="list_equipamentos")],
-        [InlineKeyboardButton(text="🔍 Buscar por QR", callback_data="scan_qr")],
-        [InlineKeyboardButton(text="🏠 Voltar", callback_data="menu_refresh")]
-    ])
-    
-    texto = "🚜 **Menu de Equipamentos**\n\nEscolha uma opção:"
-    
-    try:
-        await message.edit_text(texto, reply_markup=keyboard)
-    except:
-        await message.answer(texto, reply_markup=keyboard)
-# ===============================================
-# HANDLERS DE CALLBACK
-# ===============================================
-
-async def callback_handler(callback: CallbackQuery):
-    """Handler geral para callbacks"""
-    data = callback.data
-    chat_id = str(callback.message.chat.id)
-    
-    try:
-        await callback.answer()  # Confirmar callback
-        
-        if data == "menu_refresh":
-            if verificar_autenticacao(chat_id):
-                operador = obter_operador_sessao(chat_id)
-                await mostrar_menu_principal(callback.message, operador['nome'])
-            else:
-                await callback.message.edit_text(MessageTemplates.unauthorized_access())
-                
-        elif data == "menu_checklists":
-            await mostrar_menu_checklists(callback.message)
-            
-        elif data == "menu_equipamentos":
-            await mostrar_menu_equipamentos(callback.message)
-            
-        elif data == "menu_help":
-            await callback.message.edit_text(MessageTemplates.help_message())
-            
     except Exception as e:
         logger.error(f"❌ Erro no callback: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-# ===============================================
-# MENUS ESPECÍFICOS
-# ===============================================
-
-@require_auth
-async def mostrar_menu_checklists(message: Message, operador=None):
-    """Mostra menu de checklists"""
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
-        [InlineKeyboardButton(text="🔍 Buscar por QR", callback_data="scan_qr")],
-        [InlineKeyboardButton(text="🏠 Voltar", callback_data="menu_refresh")]
-    ])
-    
-    texto = "📋 **Menu de Checklists**\n\nEscolha uma opção:"
-    await message.edit_text(texto, reply_markup=keyboard)
-
-@require_auth
-async def mostrar_menu_equipamentos(message: Message, operador=None):
-    """Mostra menu de equipamentos"""
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚜 Listar Equipamentos", callback_data="list_equipamentos")],
-        [InlineKeyboardButton(text="🔍 Buscar por QR", callback_data="scan_qr")],
-        [InlineKeyboardButton(text="🏠 Voltar", callback_data="menu_refresh")]
-    ])
-    
-    texto = "🚜 **Menu de Equipamentos**\n\nEscolha uma opção:"
-    await message.edit_text(texto, reply_markup=keyboard)
-
-# ===============================================
-# PROCESSAMENTO DE QR CODE
-# ===============================================
-
-async def processar_equipamento_qr(message: Message, uuid: str):
-    """Processa QR code de equipamento"""
-    
-    await message.answer(f"🔍 **Processando QR Code...**\n\nUUID: `{uuid}`")
-    
-    # TODO: Implementar busca de equipamento por UUID
-    # Por enquanto, mostrar mensagem de desenvolvimento
-    await message.answer(MessageTemplates.feature_under_development())
-
-# ===============================================
-# COMANDOS ADMINISTRATIVOS
-# ===============================================
+        await callback.message.edit_text(
+            "❌ Erro interno. Tente novamente.",
+            reply_markup=criar_keyboard_voltar()
+        )
 
 async def admin_handler(message: Message):
-    """Handler para comandos administrativos"""
-    user_id = message.from_user.id
-    
-    if user_id not in ADMIN_IDS:
-        await message.answer("🚫 **Acesso Negado**\n\nVocê não tem permissão para usar comandos administrativos.")
-        return
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📊 Status", callback_data="admin_status"),
-            InlineKeyboardButton(text="🧹 Limpeza", callback_data="admin_cleanup")
-        ],
-        [
-            InlineKeyboardButton(text="🔄 Restart", callback_data="admin_restart"),
-            InlineKeyboardButton(text="📋 Logs", callback_data="admin_logs")
+    """Handler do comando /admin (apenas para administradores)"""
+    try:
+        user_id = message.from_user.id
+        
+        if str(user_id) not in ADMIN_IDS:
+            await message.answer("❌ Acesso negado. Você não é um administrador.")
+            return
+        
+        stats = obter_estatisticas_sessoes()
+        status_api = await verificar_status_api()
+        
+        texto = f"""
+🔧 **PAINEL ADMINISTRATIVO**
+
+📊 **Estatísticas do Sistema:**
+• Sessões ativas: {stats.get('ativas', 0)}
+• Total de logins: {stats.get('total_logins', 0)}
+• API Status: {'🟢 Online' if status_api else '🔴 Offline'}
+
+⚙️ **Ações Disponíveis:**
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton(text="📊 Estatísticas Detalhadas", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="🧹 Limpar Sessões", callback_data="admin_cleanup")],
+            [InlineKeyboardButton(text="🔄 Verificar API", callback_data="admin_api_check")]
         ]
-    ])
-    
-    await message.answer(MessageTemplates.admin_menu(), reply_markup=keyboard)
+        
+        await message.answer(
+            texto,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Erro no comando admin: {e}")
+        await message.answer(f"❌ Erro: {e}")
 
 async def admin_callback_handler(callback: CallbackQuery):
     """Handler para callbacks administrativos"""
-    if callback.from_user.id not in ADMIN_IDS:
-        await callback.answer("Acesso negado", show_alert=True)
-        return
-    
-    data = callback.data
-    
     try:
-        await callback.answer()
+        user_id = callback.from_user.id
         
-        if data == "admin_status":
-            # Obter estatísticas
-            session_stats = obter_estatisticas_sessoes()
-            api_status = await verificar_status_api()
-            system_info = SystemUtils.get_memory_usage()
-            
-            stats = {
-                'total_sessions': session_stats['total'],
-                'authenticated_users': session_stats['autenticadas'],
-                'api_status': api_status,
-                **system_info
-            }
-            
-            texto = MessageTemplates.system_status(stats)
-            await callback.message.edit_text(texto)
-            
+        if str(user_id) not in ADMIN_IDS:
+            await callback.answer("❌ Acesso negado", show_alert=True)
+            return
+        
+        await callback.answer()
+        data = callback.data
+        
+        if data == "admin_stats":
+            stats = obter_estatisticas_sessoes()
+            texto = f"""
+📊 **Estatísticas Detalhadas**
+
+🏃‍♂️ **Sessões Ativas:** {stats.get('ativas', 0)}
+📈 **Total de Logins:** {stats.get('total_logins', 0)}
+⏰ **Sessões Expiradas:** {stats.get('expiradas', 0)}
+🕒 **Última Limpeza:** {stats.get('ultima_limpeza', 'N/A')}
+
+🔧 **Sistema:** Funcionando
+            """
+        
         elif data == "admin_cleanup":
             from core.session import limpar_sessoes_expiradas
             removidas = limpar_sessoes_expiradas()
-            
-            texto = f"🧹 **Limpeza Executada**\n\n{removidas} sessões expiradas removidas."
-            await callback.message.edit_text(texto)
+            texto = f"🧹 **Limpeza Executada**\n\n✅ {removidas} sessões removidas"
+        
+        elif data == "admin_api_check":
+            status = await verificar_status_api()
+            from core.config import API_BASE_URL
+            texto = f"""
+🔍 **Verificação da API**
+
+Status: {'🟢 Online' if status else '🔴 Offline'}
+URL: `{API_BASE_URL}`
+Última verificação: Agora
+            """
+        
+        else:
+            texto = "❌ Ação não reconhecida"
+        
+        await callback.message.edit_text(texto)
             
     except Exception as e:
         logger.error(f"❌ Erro no admin callback: {e}")
         await callback.message.edit_text(f"❌ Erro: {e}")
 
 # ===============================================
-# REGISTRAR HANDLERS
+# REGISTRAR HANDLERS PRINCIPAIS
 # ===============================================
 
 def register_handlers(dp: Dispatcher):
-    """Registra todos os handlers no dispatcher"""
+    """Registra todos os handlers principais no dispatcher"""
     
     # Comandos principais
     dp.message.register(start_handler, Command("start"))
@@ -535,121 +376,7 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(admin_callback_handler, F.data.startswith("admin_"))
     
     # Callbacks de lista/navegação
-    #dp.callback_query.register(callback_handler, F.data.startswith("list_"))
-    #dp.callback_query.register(callback_handler, F.data.in_({"scan_qr"}))
-    
-    logger.info("✅ Handlers principais registrados")
-
-def register_checklist_handlers(dp: Dispatcher):
-    """Registra handlers de checklist separadamente"""
-    try:
-        from bot_checklist.handlers import register_handlers as register_checklist_handlers_internal
-        register_checklist_handlers_internal(dp)
-        logger.info("✅ Handlers de checklist registrados")
-    except ImportError as e:
-        logger.warning(f"⚠️ Módulo checklist não encontrado: {e}")
-    except Exception as e:
-        logger.error(f"❌ Erro ao registrar handlers de checklist: {e}")
-
-def register_qr_handlers(dp: Dispatcher):
-    """Registra handlers de QR code separadamente"""
-    try:
-        from bot_qr.handlers import register_handlers as register_qr_handlers_internal
-        register_qr_handlers_internal(dp)
-        logger.info("✅ Handlers de QR Code registrados")
-    except ImportError as e:
-        logger.warning(f"⚠️ Módulo QR não encontrado: {e}")
-    except Exception as e:
-        logger.error(f"❌ Erro ao registrar handlers de QR: {e}")
-
-def register_reports_handlers(dp: Dispatcher):
-    """Registra handlers de relatórios separadamente"""
-    try:
-        from bot_reports.handlers import register_handlers as register_reports_handlers_internal
-        register_reports_handlers_internal(dp)
-        logger.info("✅ Handlers de relatórios registrados")
-    except ImportError as e:
-        logger.warning(f"⚠️ Módulo relatórios não encontrado: {e}")
-    except Exception as e:
-        logger.error(f"❌ Erro ao registrar handlers de relatórios: {e}")
-
-# =============================================== 
-# HANDLERS ESPECÍFICOS PARA CALLBACKS PRINCIPAIS
-# ===============================================
-
-@require_auth
-async def handle_list_checklists(callback: CallbackQuery, operador=None):
-    """Handler para botão 'Meus Checklists'"""
-    try:
-        await callback.answer()
-        
-        # Redirecionar para o handler do módulo checklist
-        from bot_checklist.handlers import listar_checklists_handler
-        await listar_checklists_handler(callback, operador=operador)
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao listar checklists: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-@require_auth 
-async def handle_list_equipamentos(callback: CallbackQuery, operador=None):
-    """Handler para botão 'Listar Equipamentos'"""
-    try:
-        await callback.answer()
-        
-        # Redirecionar para o handler do módulo checklist  
-        from bot_checklist.handlers import listar_equipamentos_handler
-        await listar_equipamentos_handler(callback, operador=operador)
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao listar equipamentos: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-@require_auth
-async def handle_scan_qr(callback: CallbackQuery, operador=None):
-    """Handler para botão 'Buscar por QR'"""
-    try:
-        await callback.answer()
-        
-        # Redirecionar para o handler do módulo QR
-        from bot_qr.handlers import scan_new_qr_handler
-        await scan_new_qr_handler(callback, operador=operador)
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao processar QR: {e}")
-        await callback.message.edit_text(MessageTemplates.error_generic())
-
-# ===============================================
-# MODIFICAR A FUNÇÃO register_handlers EXISTENTE
-# ADICIONAR ESTAS LINHAS NO FINAL DA FUNÇÃO
-# ===============================================
-
-def register_handlers(dp: Dispatcher):
-    """Registra todos os handlers no dispatcher"""
-    
-    # Comandos principais
-    dp.message.register(start_handler, Command("start"))
-    dp.message.register(admin_handler, Command("admin"))
-    
-    # Estados de autenticação
-    dp.message.register(processar_nome_operador, AuthStates.waiting_for_name)
-    dp.message.register(processar_data_nascimento, AuthStates.waiting_for_birth_date)
-    
-    # Callbacks gerais
-    dp.callback_query.register(callback_handler, F.data.startswith("menu_"))
-    dp.callback_query.register(admin_callback_handler, F.data.startswith("admin_"))
-    
-    # Callbacks de lista/navegação  
     dp.callback_query.register(callback_handler, F.data.startswith("list_"))
     dp.callback_query.register(callback_handler, F.data.in_({"scan_qr"}))
-    
-    # ===============================================
-    # ADICIONAR ESTAS LINHAS (HANDLERS ESPECÍFICOS):
-    # ===============================================
-    
-    # Handlers específicos para botões principais
-    dp.callback_query.register(handle_list_checklists, F.data == "list_checklists")
-    dp.callback_query.register(handle_list_equipamentos, F.data == "list_equipamentos") 
-    dp.callback_query.register(handle_scan_qr, F.data == "scan_qr")
     
     logger.info("✅ Handlers principais registrados")

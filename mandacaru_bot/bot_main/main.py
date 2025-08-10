@@ -1,6 +1,6 @@
 # ===============================================
 # ARQUIVO: mandacaru_bot/bot_main/main.py
-# Loop principal do bot - VERSÃO CORRIGIDA
+# Loop principal do bot - CORRIGIDO
 # ===============================================
 
 import asyncio
@@ -36,29 +36,39 @@ async def create_bot() -> tuple[Bot, Dispatcher]:
     # Registrar handlers principais
     register_handlers(dp)
     
-    # Registrar handlers de checklist
+    # ===============================================
+    # CORREÇÃO: IMPORTAÇÃO DIRETA DOS MÓDULOS
+    # ===============================================
+    
+    # Registrar handlers de checklist - IMPORTAÇÃO CORRIGIDA
     try:
         from bot_checklist.handlers import register_handlers as register_checklist_handlers
         register_checklist_handlers(dp)
         logger.info("✅ Handlers de checklist registrados")
+    except ImportError as e:
+        logger.warning(f"⚠️ Módulo bot_checklist não encontrado: {e}")
     except Exception as e:
-        logger.warning(f"⚠️ Erro ao carregar módulo checklist: {e}")
+        logger.error(f"❌ Erro ao registrar handlers de checklist: {e}")
     
-    # Registrar handlers de QR Code
+    # Registrar handlers de QR Code - IMPORTAÇÃO CORRIGIDA
     try:
         from bot_qr.handlers import register_handlers as register_qr_handlers
         register_qr_handlers(dp)
         logger.info("✅ Handlers de QR Code registrados")
+    except ImportError as e:
+        logger.warning(f"⚠️ Módulo bot_qr não encontrado: {e}")
     except Exception as e:
-        logger.warning(f"⚠️ Erro ao carregar módulo QR: {e}")
+        logger.error(f"❌ Erro ao registrar handlers de QR: {e}")
     
-    # Registrar handlers de relatórios
+    # Registrar handlers de relatórios - IMPORTAÇÃO CORRIGIDA
     try:
         from bot_reports.handlers import register_handlers as register_reports_handlers
         register_reports_handlers(dp)
         logger.info("✅ Handlers de relatórios registrados")
+    except ImportError as e:
+        logger.warning(f"⚠️ Módulo bot_reports não encontrado: {e}")
     except Exception as e:
-        logger.warning(f"⚠️ Erro ao carregar módulo relatórios: {e}")
+        logger.error(f"❌ Erro ao registrar handlers de relatórios: {e}")
     
     logger.info("✅ Bot e dispatcher configurados")
     return bot, dp
@@ -89,82 +99,48 @@ async def cleanup_task():
 async def on_startup(bot: Bot):
     """Executado quando o bot inicia"""
     logger.info("🚀 Bot iniciado com sucesso!")
-    
-    # Obter informações do bot
-    try:
-        bot_info = await bot.get_me()
-        logger.info(f"🤖 Bot: @{bot_info.username} ({bot_info.first_name})")
-        logger.info(f"🆔 ID: {bot_info.id}")
-    except Exception as e:
-        logger.warning(f"⚠️ Não foi possível obter informações do bot: {e}")
-    
-    # Iniciar tarefa de limpeza
-    asyncio.create_task(cleanup_task())
-    logger.info("✅ Tarefa de limpeza iniciada")
 
 async def on_shutdown(bot: Bot):
-    """Executado quando o bot é encerrado"""
-    logger.info("🛑 Encerrando bot...")
-    
-    # Fechar sessão do bot
-    await bot.session.close()
-    logger.info("✅ Sessão do bot fechada")
+    """Executado quando o bot encerra"""
+    logger.info("🛑 Bot sendo encerrado...")
 
 # ===============================================
-# FUNÇÃO PRINCIPAL DE EXECUÇÃO
+# FUNÇÃO PRINCIPAL DO BOT
 # ===============================================
 
 async def run_bot():
-    """Executa o bot principal"""
-    logger.info("🔄 Configurando bot...")
-    
-    # Criar bot e dispatcher
-    bot, dp = await create_bot()
-    
-    # Configurar eventos de startup e shutdown
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
-    
+    """Função principal para execução do bot"""
     try:
+        # Criar bot e dispatcher
+        bot, dp = await create_bot()
+        
+        # Configurar eventos de inicialização/encerramento
+        dp.startup.register(on_startup)
+        dp.shutdown.register(on_shutdown)
+        
+        # Iniciar tarefa de limpeza em background
+        cleanup_task_handle = asyncio.create_task(cleanup_task())
+        
         # Iniciar polling
-        logger.info("📡 Iniciando polling...")
-        await dp.start_polling(
-            bot,
-            allowed_updates=['message', 'callback_query'],
-            drop_pending_updates=True
-        )
+        logger.info("🔄 Iniciando polling do bot...")
+        await dp.start_polling(bot, skip_updates=True)
         
     except Exception as e:
-        logger.error(f"❌ Erro no polling: {e}")
+        logger.error(f"❌ Erro crítico no bot: {e}")
         raise
     finally:
-        # Garantir que o bot seja fechado
-        await bot.session.close()
-        logger.info("👋 Bot encerrado")
-
-# ===============================================
-# FUNÇÃO DE TESTE
-# ===============================================
-
-async def test_bot_connection():
-    """Testa a conexão com o bot do Telegram"""
-    try:
-        bot = Bot(token=TELEGRAM_TOKEN)
-        bot_info = await bot.get_me()
-        await bot.session.close()
+        # Cancelar tarefa de limpeza
+        if 'cleanup_task_handle' in locals():
+            cleanup_task_handle.cancel()
         
-        logger.info(f"✅ Conexão testada: @{bot_info.username}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Erro na conexão: {e}")
-        return False
+        # Fechar sessão do bot
+        if 'bot' in locals():
+            await bot.session.close()
+            logger.info("🔒 Sessão do bot fechada")
 
 # ===============================================
-# MODO DEBUG
+# PONTO DE ENTRADA (se executado diretamente)
 # ===============================================
 
-if DEBUG:
-    # Configurar logging mais detalhado em modo debug
-    logging.getLogger('aiogram').setLevel(logging.INFO)
-    logger.info("🔧 Modo DEBUG ativado")
+if __name__ == "__main__":
+    asyncio.run(run_bot())
