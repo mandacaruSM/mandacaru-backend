@@ -188,85 +188,65 @@ async def processar_data_nascimento(message: Message, state: FSMContext):
         await message.answer("❌ Erro interno. Digite /start para recomeçar.")
         await state.clear()
 
-@require_auth
-async def callback_handler(callback: CallbackQuery, operador=None):
-    """Handler principal para callbacks do menu - CORRIGIDO"""
+
+def register_checklist_handlers(dp: Dispatcher):
+    """Registra handlers de checklist separadamente - CORRIGIDO"""
     try:
-        await callback.answer()
-        data = callback.data
+        from bot_checklist.handlers import register_handlers as register_checklist_handlers_internal
+        register_checklist_handlers_internal(dp)
+        logger.info("✅ Handlers de checklist registrados")
+    except ImportError as e:
+        logger.warning(f"⚠️ Módulo checklist não encontrado: {e}")
+    except Exception as e:
+        logger.error(f"❌ Erro ao registrar handlers de checklist: {e}")
+
+@require_auth
+async def callback_handler(callback: CallbackQuery, **kwargs):
+    """Handler geral para callbacks - ASSINATURA CORRIGIDA"""
+    data = callback.data
+    chat_id = str(callback.message.chat.id)
+    
+    try:
+        await callback.answer()  # Confirmar callback
         
         if data == "menu_refresh":
-            await callback.message.edit_text(
-                f"🏠 **Menu Principal**\n\nOlá, {operador['nome']}!\n\nSelecione uma opção:",
-                reply_markup=criar_menu_principal()
-            )
-        
+            if verificar_autenticacao(chat_id):
+                operador = obter_operador_sessao(chat_id)
+                await mostrar_menu_principal(callback.message, operador['nome'])
+            else:
+                await callback.message.edit_text(MessageTemplates.unauthorized_access())
+                
         elif data == "menu_checklists":
-            await callback.message.edit_text(
-                "📋 **Menu de Checklists**\n\nEscolha uma opção:",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
-                    [InlineKeyboardButton(text="🔧 Por Equipamento", callback_data="list_equipamentos")],
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="menu_refresh")]
-                ])
-            )
-        
-        elif data == "menu_reports":
-            await callback.message.edit_text(
-                "📊 **Menu de Relatórios**\n\nEscolha uma opção:",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📊 Meus Relatórios", callback_data="my_reports")],
-                    [InlineKeyboardButton(text="📈 Estatísticas", callback_data="stats_reports")],
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="menu_refresh")]
-                ])
-            )
-        
-        elif data == "list_equipamentos":
-            # Redirecionar para handler de equipamentos no módulo checklist
-            try:
-                from bot_checklist.handlers import listar_equipamentos_handler
-                await listar_equipamentos_handler(callback, operador=operador)
-            except ImportError:
-                await callback.message.edit_text(
-                    "⚠️ **Módulo de Equipamentos Indisponível**\n\nEsta funcionalidade está em manutenção.",
-                    reply_markup=criar_keyboard_voltar()
-                )
-        
-        elif data == "list_checklists":
-            # Redirecionar para handler de checklists no módulo checklist
-            try:
-                from bot_checklist.handlers import listar_checklists_handler
-                await listar_checklists_handler(callback, operador=operador)
-            except ImportError:
-                await callback.message.edit_text(
-                    "⚠️ **Módulo de Checklists Indisponível**\n\nEsta funcionalidade está em manutenção.",
-                    reply_markup=criar_keyboard_voltar()
-                )
-        
+            await mostrar_menu_checklists(callback.message)
+            
+        elif data == "menu_equipamentos":
+            await mostrar_menu_equipamentos(callback.message)
+            
+        elif data == "menu_help":
+            await callback.message.edit_text(MessageTemplates.help_message())
+            
         elif data == "scan_qr":
-            await callback.message.edit_text(
-                "📱 **Escanear QR Code**\n\n"
-                "Para escanear um QR Code de equipamento:\n\n"
-                "1️⃣ Abra a câmera do seu celular\n"
-                "2️⃣ Aponte para o QR Code\n"
-                "3️⃣ Toque no link que aparecer\n"
-                "4️⃣ O Telegram abrirá automaticamente\n\n"
-                "💡 O QR Code geralmente está na plaqueta do equipamento.",
-                reply_markup=criar_keyboard_voltar()
-            )
-        
-        else:
-            await callback.message.edit_text(
-                "⚙️ **Funcionalidade em Desenvolvimento**\n\nEsta opção estará disponível em breve.",
-                reply_markup=criar_keyboard_voltar()
-            )
-        
+            # Instrução para escanear QR Code
+            texto = """📱 **Escanear QR Code**
+
+Para escanear um QR Code:
+1. Tire uma foto do QR Code do equipamento
+2. Ou use o comando: /start eq_UUID_DO_EQUIPAMENTO
+
+Exemplo: /start eq_123e4567-e89b-12d3-a456-426614174000"""
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
+            ])
+            
+            await callback.message.edit_text(texto, reply_markup=keyboard)
+            
     except Exception as e:
         logger.error(f"❌ Erro no callback: {e}")
-        await callback.message.edit_text(
-            "❌ Erro interno. Tente novamente.",
-            reply_markup=criar_keyboard_voltar()
-        )
+        try:
+            await callback.message.edit_text(MessageTemplates.error_generic())
+        except:
+            await callback.answer("❌ Erro interno", show_alert=True)
 
 async def admin_handler(message: Message):
     """Handler do comando /admin (apenas para administradores)"""
@@ -306,51 +286,34 @@ async def admin_handler(message: Message):
         logger.error(f"❌ Erro no comando admin: {e}")
         await message.answer(f"❌ Erro: {e}")
 
-async def admin_callback_handler(callback: CallbackQuery):
-    """Handler para callbacks administrativos"""
+async def admin_callback_handler(callback: CallbackQuery, **kwargs):
+    """Handler para callbacks administrativos - ASSINATURA CORRIGIDA"""
+    data = callback.data
+    user_id = callback.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await callback.answer("❌ Acesso negado", show_alert=True)
+        return
+    
     try:
-        user_id = callback.from_user.id
-        
-        if str(user_id) not in ADMIN_IDS:
-            await callback.answer("❌ Acesso negado", show_alert=True)
-            return
-        
         await callback.answer()
-        data = callback.data
         
-        if data == "admin_stats":
-            stats = obter_estatisticas_sessoes()
-            texto = f"""
-📊 **Estatísticas Detalhadas**
-
-🏃‍♂️ **Sessões Ativas:** {stats.get('ativas', 0)}
-📈 **Total de Logins:** {stats.get('total_logins', 0)}
-⏰ **Sessões Expiradas:** {stats.get('expiradas', 0)}
-🕒 **Última Limpeza:** {stats.get('ultima_limpeza', 'N/A')}
-
-🔧 **Sistema:** Funcionando
-            """
-        
-        elif data == "admin_cleanup":
+        if data == "admin_clear_sessions":
             from core.session import limpar_sessoes_expiradas
             removidas = limpar_sessoes_expiradas()
-            texto = f"🧹 **Limpeza Executada**\n\n✅ {removidas} sessões removidas"
-        
-        elif data == "admin_api_check":
+            await callback.message.edit_text(f"🧹 **Sessões Limpas**\n\n{removidas} sessões foram removidas.")
+            
+        elif data == "admin_api_status":
             status = await verificar_status_api()
-            from core.config import API_BASE_URL
-            texto = f"""
-🔍 **Verificação da API**
-
-Status: {'🟢 Online' if status else '🔴 Offline'}
-URL: `{API_BASE_URL}`
-Última verificação: Agora
-            """
-        
-        else:
-            texto = "❌ Ação não reconhecida"
-        
-        await callback.message.edit_text(texto)
+            if status:
+                texto = "✅ **API Status: Online**\n\nConexão com o backend estabelecida."
+            else:
+                texto = "❌ **API Status: Offline**\n\nProblema de conexão com o backend."
+            
+            await callback.message.edit_text(texto)
+            
+        elif data == "admin_refresh":
+            await admin_handler(callback.message)
             
     except Exception as e:
         logger.error(f"❌ Erro no admin callback: {e}")

@@ -33,45 +33,33 @@ async def create_bot() -> tuple[Bot, Dispatcher]:
     # Criar dispatcher
     dp = Dispatcher()
     
-    # Registrar handlers principais
+    # Registrar handlers
     register_handlers(dp)
     
-    # ===============================================
-    # CORREÇÃO: IMPORTAÇÃO DIRETA DOS MÓDULOS
-    # ===============================================
-    
-    # Registrar handlers de checklist - IMPORTAÇÃO CORRIGIDA
+    # Registrar handlers de checklist - CORREÇÃO AQUI
     try:
-        from bot_checklist.handlers import register_handlers as register_checklist_handlers
+        from .handlers import register_checklist_handlers
         register_checklist_handlers(dp)
-        logger.info("✅ Handlers de checklist registrados")
-    except ImportError as e:
-        logger.warning(f"⚠️ Módulo bot_checklist não encontrado: {e}")
     except Exception as e:
-        logger.error(f"❌ Erro ao registrar handlers de checklist: {e}")
+        logger.warning(f"⚠️ Erro ao carregar módulo checklist: {e}")
     
-    # Registrar handlers de QR Code - IMPORTAÇÃO CORRIGIDA
+    # Registrar handlers de QR Code
     try:
-        from bot_qr.handlers import register_handlers as register_qr_handlers
+        from .handlers import register_qr_handlers
         register_qr_handlers(dp)
-        logger.info("✅ Handlers de QR Code registrados")
-    except ImportError as e:
-        logger.warning(f"⚠️ Módulo bot_qr não encontrado: {e}")
     except Exception as e:
-        logger.error(f"❌ Erro ao registrar handlers de QR: {e}")
+        logger.warning(f"⚠️ Erro ao carregar módulo QR: {e}")
     
-    # Registrar handlers de relatórios - IMPORTAÇÃO CORRIGIDA
+    # Registrar handlers de relatórios
     try:
-        from bot_reports.handlers import register_handlers as register_reports_handlers
+        from .handlers import register_reports_handlers
         register_reports_handlers(dp)
-        logger.info("✅ Handlers de relatórios registrados")
-    except ImportError as e:
-        logger.warning(f"⚠️ Módulo bot_reports não encontrado: {e}")
     except Exception as e:
-        logger.error(f"❌ Erro ao registrar handlers de relatórios: {e}")
+        logger.warning(f"⚠️ Erro ao carregar módulo relatórios: {e}")
     
     logger.info("✅ Bot e dispatcher configurados")
     return bot, dp
+
 
 # ===============================================
 # TAREFAS EM BACKGROUND

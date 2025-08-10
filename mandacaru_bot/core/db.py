@@ -64,34 +64,38 @@ async def verificar_status_api() -> bool:
 # ===============================================
 
 async def buscar_operador_por_nome(nome: str) -> Optional[Dict[str, Any]]:
-    """Busca operador pelo nome"""
+    """Busca operador pelo nome usando endpoint correto"""
     logger.info(f"🔍 Buscando operador: {nome}")
-    
-    result = await fazer_requisicao_api('GET', 'operadores/', params={'search': nome})
-    
-    if result and result.get('results'):
+
+    # Usar endpoint /api/operadores/busca/ com parâmetro nome
+    result = await fazer_requisicao_api('GET', 'operadores/busca/', params={'nome': nome})
+
+    if result and result.get('success') and result.get('results'):
         operadores = result['results']
-        # Retornar o primeiro resultado que contenha o nome
-        for operador in operadores:
-            if nome.lower() in operador.get('nome', '').lower():
-                logger.info(f"✅ Operador encontrado: {operador.get('nome')}")
-                return operador
-    
+        if operadores:
+            # Retornar o primeiro resultado
+            operador = operadores[0]
+            logger.info(f"✅ Operador encontrado: {operador.get('nome')}")
+            return operador
+
     logger.warning(f"⚠️ Operador não encontrado: {nome}")
     return None
 
-async def buscar_operador_por_id(operador_id: int) -> Optional[Dict[str, Any]]:
-    """Busca operador pelo ID"""
-    logger.info(f"🔍 Buscando operador por ID: {operador_id}")
-    
-    result = await fazer_requisicao_api('GET', f'operadores/{operador_id}/')
-    
-    if result:
-        logger.info(f"✅ Operador encontrado: {result.get('nome')}")
+async def buscar_operador_por_chat_id(chat_id: str) -> Optional[Dict[str, Any]]:
+    """Busca operador pelo chat_id do Telegram usando endpoint correto"""
+    logger.info(f"🔍 Buscando operador por chat_id: {chat_id}")
+
+    # Usar endpoint específico /api/operadores/por-chat-id/
+    result = await fazer_requisicao_api('GET', 'operadores/por-chat-id/', params={'chat_id': chat_id})
+
+    if result and result.get('success'):
+        operador = result.get('operador')
+        logger.info(f"✅ Operador encontrado por chat_id: {operador.get('nome')}")
+        return operador
     else:
-        logger.warning(f"⚠️ Operador ID {operador_id} não encontrado")
-    
-    return result
+        error_msg = result.get('error', 'Erro desconhecido') if result else 'Sem resposta'
+        logger.warning(f"⚠️ Operador não encontrado para chat_id {chat_id}: {error_msg}")
+        return None
 
 async def atualizar_chat_id_operador(operador_id: int, chat_id: str) -> bool:
     """Atualiza o chat_id do operador"""
@@ -324,31 +328,46 @@ async def finalizar_checklist_nr12(checklist_id: int, operador_codigo: str) -> b
 # ===============================================
 
 async def validar_operador(nome: str, data_nascimento: str) -> Optional[Dict[str, Any]]:
-    """Valida dados do operador"""
+    """Valida dados do operador usando endpoint correto"""
     logger.info(f"🔐 Validando operador: {nome}")
-    
-    operador = await buscar_operador_por_nome(nome)
-    
-    if not operador:
+
+    # Usar o endpoint correto /api/operadores/validar-login/
+    data = {
+        'nome': nome,
+        'data_nascimento': data_nascimento
+    }
+
+    result = await fazer_requisicao_api('POST', 'operadores/validar-login/', data=data)
+
+    if result and result.get('success'):
+        operador_data = result.get('operador')
+        logger.info(f"✅ Operador {nome} validado com sucesso")
+        return operador_data
+    else:
+        error_msg = result.get('error', 'Erro desconhecido') if result else 'Sem resposta da API'
+        logger.warning(f"⚠️ Falha na validação para {nome}: {error_msg}")
         return None
-    
-    # Verificar data de nascimento se disponível
-    if operador.get('data_nascimento') and data_nascimento:
-        from datetime import datetime
-        try:
-            # Converter data recebida (DD/MM/AAAA) para comparação
-            data_input = datetime.strptime(data_nascimento, '%d/%m/%Y').date()
-            
-            # Converter data do operador (AAAA-MM-DD) para comparação
-            data_operador = datetime.strptime(operador['data_nascimento'], '%Y-%m-%d').date()
-            
-            if data_input != data_operador:
-                logger.warning(f"⚠️ Data de nascimento inválida para {nome}")
-                return None
-                
-        except ValueError:
-            logger.warning(f"⚠️ Formato de data inválido: {data_nascimento}")
-            return None
+
+# ===============================================
+# ADICIONAR nova função para buscar por código
+# ===============================================
+
+async def buscar_operador_por_codigo(codigo: str) -> Optional[Dict[str, Any]]:
+    """Busca operador pelo código usando endpoint correto"""
+    logger.info(f"🔍 Buscando operador por código: {codigo}")
+
+    # Usar endpoint /api/operadores/busca/ com parâmetro codigo
+    result = await fazer_requisicao_api('GET', 'operadores/busca/', params={'codigo': codigo})
+
+    if result and result.get('success') and result.get('results'):
+        operadores = result['results']
+        if operadores:
+            operador = operadores[0]  # Primeiro resultado
+            logger.info(f"✅ Operador encontrado por código: {operador.get('nome')}")
+            return operador
+
+    logger.warning(f"⚠️ Operador não encontrado para código: {codigo}")
+    return None
     
 
 # FUNÇÕES NR12 (ADICIONADAS)

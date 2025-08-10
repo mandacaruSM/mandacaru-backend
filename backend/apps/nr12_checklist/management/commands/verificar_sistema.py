@@ -363,7 +363,7 @@ class Command(BaseCommand):
             # Testar validação - CORRIGIDO: sem usar 'types'
             teste_qr = '{"tipo": "equipamento", "id": 1, "codigo": "TEST"}'
             resultado = QRCodeGenerator.validar_qr_data(teste_qr)
-            
+
             if isinstance(resultado, dict) and 'valid' in resultado:
                 self.stdout.write('   ✅ Função de validação QR funcionando')
             else:
