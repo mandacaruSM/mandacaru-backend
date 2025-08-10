@@ -330,59 +330,60 @@ class Operador(models.Model):
         return qr_data
     
     def get_equipamentos_disponiveis(self):
-    
+        """
+        Retorna um queryset de equipamentos que este operador pode usar.
+        Se o operador for supervisor, inclui também os equipamentos de seus supervisionados.
+        """
         from backend.apps.equipamentos.models import Equipamento
-    
-        # Conjunto para evitar duplicatas
+
+        # Usa um set para evitar duplicatas de IDs
         equipamentos_ids = set()
-        
+
         # 1. Equipamentos diretamente autorizados
         if self.equipamentos_autorizados.exists():
             equipamentos_ids.update(
-                self.equipamentos_autorizados.filter(ativo_nr12=True).values_list('id', flat=True)
+                self.equipamentos_autorizados.filter(ativo_nr12=True)
+                                            .values_list('id', flat=True)
             )
-        
         # 2. Equipamentos dos clientes autorizados
         elif self.clientes_autorizados.exists():
             equipamentos_ids.update(
                 Equipamento.objects.filter(
-                    cliente__in=self.clientes_autorizados.all(), 
+                    cliente__in=self.clientes_autorizados.all(),
                     ativo_nr12=True
                 ).values_list('id', flat=True)
             )
-        
-        # 3. ✅ NOVO: Equipamentos dos operadores supervisionados (se é supervisor)
+
+        # 3. Se o operador for supervisor, incluir equipamentos dos supervisionados
         if self.operadores_supervisionados.exists():
-            for operador_supervisionado in self.operadores_supervisionados.filter(
-                status='ATIVO', 
-                ativo_bot=True
+            for supervisonado in self.operadores_supervisionados.filter(
+                status='ATIVO', ativo_bot=True
             ):
-                # Equipamentos diretos do supervisionado
-                if operador_supervisionado.equipamentos_autorizados.exists():
+                # Equipamentos autorizados diretamente
+                if supervisonado.equipamentos_autorizados.exists():
                     equipamentos_ids.update(
-                        operador_supervisionado.equipamentos_autorizados.filter(
-                            ativo_nr12=True
-                        ).values_list('id', flat=True)
+                        supervisonado.equipamentos_autorizados.filter(ativo_nr12=True)
+                                                            .values_list('id', flat=True)
                     )
-                
-                # Equipamentos dos clientes do supervisionado
-                elif operador_supervisionado.clientes_autorizados.exists():
+                # Equipamentos de clientes dos supervisionados
+                elif supervisonado.clientes_autorizados.exists():
                     equipamentos_ids.update(
                         Equipamento.objects.filter(
-                            cliente__in=operador_supervisionado.clientes_autorizados.all(),
+                            cliente__in=supervisonado.clientes_autorizados.all(),
                             ativo_nr12=True
                         ).values_list('id', flat=True)
                     )
-        
-        # 4. Se não tem restrições específicas e não é supervisor, pode acessar todos
+
+        # 4. Se não houver restrições e o operador não for supervisor, retornar todos ativos
         if not equipamentos_ids and not self.operadores_supervisionados.exists():
             equipamentos_ids.update(
-                Equipamento.objects.filter(ativo_nr12=True).values_list('id', flat=True)
+                Equipamento.objects.filter(ativo_nr12=True)
+                                .values_list('id', flat=True)
             )
-        
-        # Retornar QuerySet final
-        return Equipamento.objects.filter(id__in=equipamentos_ids, ativo_nr12=True).order_by('nome')
 
+        # Retornar queryset ordenado e sem duplicatas
+        return Equipamento.objects.filter(id__in=equipamentos_ids, ativo_nr12=True)\
+                                .order_by('nome')
 
     def atualizar_ultimo_acesso(self, chat_id=None):
         """

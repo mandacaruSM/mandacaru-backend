@@ -13,7 +13,8 @@ from aiogram.types import (
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-
+from mandacaru_bot.core.session import obter_operador_sessao
+from mandacaru_bot.core.db import fazer_requisicao_api
 # Imports do core
 from core.db import (
     buscar_equipamentos_com_nr12, buscar_checklists_nr12,
@@ -40,17 +41,13 @@ PAGE_SIZE = 10
 def _cb_meus(page: int) -> str:
     return f"{CALLBACK_MEUS_PREFIX}:{page}"
 
-def _paginador_inline(page: int, has_prev: bool, has_next: bool) -> InlineKeyboardMarkup:
+def _kb_paginacao(page, has_prev, has_next):
     rows = []
     nav = []
-    if has_prev:
-        nav.append(InlineKeyboardButton(text="⬅️ Anterior", callback_data=_cb_meus(page-1)))
-    if has_next:
-        nav.append(InlineKeyboardButton(text="Próximo ➡️", callback_data=_cb_meus(page+1)))
-    if nav:
-        rows.append(nav)
-    rows.append([InlineKeyboardButton(text="◀️ Voltar", callback_data="checklist_menu")])
-
+    if has_prev: nav.append(InlineKeyboardButton("⬅️ Anterior", callback_data=_cb_meus(page-1)))
+    if has_next: nav.append(InlineKeyboardButton("Próximo ➡️", callback_data=_cb_meus(page+1)))
+    if nav: rows.append(nav)
+    rows.append([InlineKeyboardButton("◀️ Voltar", callback_data="checklist_menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 # ===============================================================
 
@@ -68,6 +65,54 @@ class ChecklistStates(StatesGroup):
 # ===============================================
 # HANDLERS PRINCIPAIS
 # ===============================================
+
+async def menu_meus_checklists(message, **kwargs):
+    # dispara página 1
+    fake_cb = type("CB", (), {"message": message, "from_user": message.from_user, "data": _cb_meus(1)})()
+    await cb_listar_meus_checklists(fake_cb)
+
+async def cb_listar_meus_checklists(callback: CallbackQuery, **kwargs):
+    chat_id = str(callback.from_user.id)
+    operador = await obter_operador_sessao(chat_id)
+    if not operador:
+        await callback.message.edit_text("🔒 Sessão expirada. Use /start.")
+        return
+
+    try:
+        _, page_str = callback.data.split(":")
+        page = max(1, int(page_str))
+    except Exception:
+        page = 1
+
+    params = f"operador_id={operador['id']}&ordering=-id&page={page}&page_size={PAGE_SIZE}"
+    resp = await fazer_requisicao_api(f"nr12/checklists/?{params}", metodo="GET")
+    if not resp.get("success"):
+        await callback.message.edit_text("❌ Não foi possível carregar (API).")
+        return
+
+    data = resp["data"]
+    results = data.get("results", [])
+    total = data.get("count", len(results))
+    has_next = (page * PAGE_SIZE) < total
+    has_prev = page > 1
+
+    if not results:
+        await callback.message.edit_text(f"📭 Você ainda não possui checklists.\n(pág. {page})",
+                                         reply_markup=_kb_paginacao(page, has_prev, has_next))
+        return
+
+    linhas = []
+    for c in results:
+        equip = c.get("equipamento", {})
+        linhas.append(
+            f"#{c.get('id')} • {c.get('status','—')}\n"
+            f"🛠️ {equip.get('nome','—')} ({equip.get('codigo','—')})\n"
+            f"🗓️ {c.get('data_checklist','—')} • Turno: {c.get('turno','—')}"
+        )
+
+    texto = f"📋 **Meus Checklists** (pág. {page})\nTotal: {total}\n\n" + "\n\n".join(linhas)
+    await callback.message.edit_text(texto, reply_markup=_kb_paginacao(page, has_prev, has_next),
+                                     disable_web_page_preview=True, parse_mode="Markdown")
 
 @require_auth
 async def comando_checklist(message: Message, operador: dict = None):
@@ -548,6 +593,8 @@ def calcular_turno_atual() -> str:
 
 def register_checklist_handlers(dp: Dispatcher):
     """Registra todos os handlers do módulo checklist"""
+    dp.message.register(menu_meus_checklists, F.text == "📋 Meus Checklists")
+    dp.callback_query.register(cb_listar_meus_checklists, F.data.startswith(CALLBACK_MEUS_PREFIX))
     
     # Comando principal
     dp.message.register(comando_checklist, Command("checklist"))
@@ -581,11 +628,11 @@ def register_checklist_handlers(dp: Dispatcher):
         handle_checklist_callback,
         F.data == "pausar_checklist"
     )
-
+    
     # Listagem paginada "Meus Checklists"
     dp.callback_query.register(
         cb_listar_meus_checklists,
         F.data.startswith(CALLBACK_MEUS_PREFIX)
     )
-    
+    register_handlers = register_checklist_handlers
     logger.info("✅ Handlers de checklist registrados com sucesso")
