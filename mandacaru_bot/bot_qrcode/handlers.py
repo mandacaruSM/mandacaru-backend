@@ -17,7 +17,7 @@ from core.session import (
     obter_operador_sessao, verificar_autenticacao,
     definir_equipamento_atual, definir_dados_temporarios
 )
-from core.db import buscar_equipamento_por_uuid
+from core.db import buscar_equipamento_por_uuid, listar_equipamentos
 from core.templates import MessageTemplates
 
 logger = logging.getLogger(__name__)
@@ -102,9 +102,24 @@ async def processar_qr_equipamento(message: Message, uuid_str: str):
         
         # Verificar se operador tem acesso a este equipamento
         operador = obter_operador_sessao(chat_id)
-        
-        # TODO: Implementar verificação de permissão do operador
-        # Por enquanto, permite acesso a todos
+        if not operador:
+            logger.error("❌ Operador não encontrado na sessão")
+            await message.answer(MessageTemplates.error_generic())
+            return
+
+        equipamentos_permitidos = await listar_equipamentos(operador_id=operador["id"])
+        if not any(eq["id"] == equipamento["id"] for eq in equipamentos_permitidos):
+            logger.warning(
+                f"🚫 Operador {operador['id']} sem permissão para equipamento {equipamento['id']}"
+            )
+            await message.answer(
+                "❌ Acesso negado. Você não tem permissão para este equipamento.",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]]
+                ),
+            )
+            return
+
         
         # Salvar equipamento na sessão
         definir_equipamento_atual(chat_id, equipamento)

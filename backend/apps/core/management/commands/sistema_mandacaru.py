@@ -249,8 +249,7 @@ class Command(BaseCommand):
         self.stdout.write("2️⃣ Criando tipos e itens NR12...")
         try:
             from backend.apps.nr12_checklist.models import criar_tipos_nr12_mandacaru
-            criar_tipos_nr12_mandacaru()
-            self.stdout.write("   ✅ Tipos NR12 criados")
+            call_command('popular_tipos_nr12')
         except Exception as e:
             self.stdout.write(f"   ❌ Erro: {e}")
         

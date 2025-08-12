@@ -20,10 +20,8 @@ Funcionalidades:
 
 __version__ = "2.0.0"
 __author__ = "Mandacaru ERP"
+from .handlers import register_handlers
 
-# COMENTAR ESTA LINHA QUE ESTÁ CAUSANDO ERRO:
-# from .handlers import register_handlers
-
-# __all__ = [
-#     'register_handlers'
-# ]
+__all__ = [
+    "register_handlers",
+]

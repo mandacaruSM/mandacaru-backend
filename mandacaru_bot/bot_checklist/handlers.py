@@ -634,5 +634,7 @@ def register_checklist_handlers(dp: Dispatcher):
         cb_listar_meus_checklists,
         F.data.startswith(CALLBACK_MEUS_PREFIX)
     )
-    register_handlers = register_checklist_handlers
     logger.info("✅ Handlers de checklist registrados com sucesso")
+
+
+register_handlers = register_checklist_handlers
