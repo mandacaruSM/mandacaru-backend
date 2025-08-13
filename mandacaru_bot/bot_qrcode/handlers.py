@@ -256,7 +256,7 @@ async def qr_create_checklist_handler(callback: CallbackQuery, operador=None):
             
             keyboard = [
                 [InlineKeyboardButton(text="▶️ Iniciar Agora", callback_data=f"start_checklist_{checklist_id}")],
-                [InlineKeyboardButton(text="📋 Listar Todos", callback_data="list_checklists")],
+                [InlineKeyboardButton(text="📋 Listar Todos", callback_data="menu_checklists")],
                 [InlineKeyboardButton(text="🔄 Escanear Outro QR", callback_data="scan_new_qr")]
             ]
             
@@ -341,17 +341,22 @@ async def scan_new_qr_handler(callback: CallbackQuery):
     
     await callback.answer()
     
-    texto = "📱 **Como Escanear QR Code**\n\n"
-    texto += "Para escanear um novo QR Code:\n\n"
-    texto += "1️⃣ **Abra a câmera** do seu celular\n"
-    texto += "2️⃣ **Aponte para o QR Code** do equipamento\n"
-    texto += "3️⃣ **Toque no link** que aparecer\n"
-    texto += "4️⃣ **Clique em 'Iniciar'** quando o Telegram abrir\n\n"
-    texto += "🔍 O QR Code geralmente está na plaqueta do equipamento.\n\n"
-    texto += "💡 **Dica:** Certifique-se de que há luz suficiente para a câmera ler o código."
+    texto = (
+        "📱 **Como Escanear QR Code**\n\n"
+        "Para acessar um equipamento via QR Code:\n\n"
+        "1️⃣ **Abra a câmera** do seu celular\n"
+        "2️⃣ **Aponte para o QR Code** do equipamento\n"
+        "3️⃣ **Toque no link** que aparecer\n"
+        "4️⃣ **Clique em 'Iniciar'** quando o Telegram abrir\n\n"
+        "🔍 O QR Code geralmente está na plaqueta do equipamento.\n\n"
+        "📸 Você também pode tirar uma foto do QR Code e enviar aqui, ou usar o comando:\n"
+        "/start eq_UUID_DO_EQUIPAMENTO\n"
+        "Exemplo: /start eq_123e4567-e89b-12d3-a456-426614174000\n\n"
+        "💡 **Dica:** Certifique-se de que há luz suficiente para a câmera ler o código."
+    )
     
     keyboard = [
-        [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
+        [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="menu_checklists")],
         [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
     ]
     
@@ -371,8 +376,5 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(qr_create_checklist_handler, F.data.startswith("qr_create_checklist_"))
     dp.callback_query.register(qr_details_handler, F.data.startswith("qr_details_"))
     dp.callback_query.register(scan_new_qr_handler, F.data == "scan_new_qr")
-    
-    # Callback para instruções de scan
-    dp.callback_query.register(scan_new_qr_handler, F.data == "scan_qr")
     
     logger.info("✅ Handlers de QR Code registrados")

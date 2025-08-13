@@ -24,7 +24,17 @@ from core.db import (
 )
 from core.templates import MessageTemplates
 from core.utils import Validators, SystemUtils
+from bot_qrcode.handlers import processar_qr_code_start
 
+# Tentar reutilizar implementações de outros módulos
+try:
+    from bot_checklist.handlers import (
+        mostrar_menu_checklist as mostrar_menu_checklists,
+        mostrar_equipamentos_checklist as mostrar_menu_equipamentos,
+    )
+except Exception:  # pragma: no cover - fallback se módulo não existir
+    mostrar_menu_checklists = None
+    mostrar_menu_equipamentos = None
 logger = logging.getLogger(__name__)
 
 # ===============================================
@@ -42,9 +52,9 @@ class AuthStates(StatesGroup):
 def criar_menu_principal():
     """Cria keyboard do menu principal"""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="list_checklists")],
-        [InlineKeyboardButton(text="🔧 Equipamentos", callback_data="list_equipamentos")],
-        [InlineKeyboardButton(text="📱 Escanear QR", callback_data="scan_qr")],
+         [InlineKeyboardButton(text="📋 Meus Checklists", callback_data="menu_checklists")],
+        [InlineKeyboardButton(text="🔧 Equipamentos", callback_data="menu_equipamentos")],
+        [InlineKeyboardButton(text="📱 Escanear QR", callback_data="menu_scan_qr")],
         [InlineKeyboardButton(text="📊 Relatórios", callback_data="menu_reports")]
     ])
 
@@ -53,6 +63,41 @@ def criar_keyboard_voltar():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
     ])
+
+
+# ===============================================
+# FUNÇÕES DE MENU
+# ===============================================
+
+async def mostrar_menu_principal(message: Message, nome_operador: str):
+    """Exibe o menu principal para o operador."""
+    texto = (
+        f"🏠 **Menu Principal**\n\n"
+        f"Olá, {nome_operador}! Selecione uma opção:"
+    )
+
+    try:
+        await message.edit_text(texto, reply_markup=criar_menu_principal(), parse_mode="Markdown")
+    except Exception:
+        await message.answer(texto, reply_markup=criar_menu_principal(), parse_mode="Markdown")
+
+
+# Fallbacks caso os módulos externos não estejam disponíveis
+if mostrar_menu_checklists is None:
+    async def mostrar_menu_checklists(message: Message, operador: dict):  # pragma: no cover - fallback
+        texto = "📋 **Checklists**\n\nNenhum checklist disponível."
+        try:
+            await message.edit_text(texto, reply_markup=criar_keyboard_voltar(), parse_mode="Markdown")
+        except Exception:
+            await message.answer(texto, reply_markup=criar_keyboard_voltar(), parse_mode="Markdown")
+
+if mostrar_menu_equipamentos is None:
+    async def mostrar_menu_equipamentos(message: Message, operador: dict):  # pragma: no cover - fallback
+        texto = "🔧 **Equipamentos**\n\nNenhum equipamento disponível."
+        try:
+            await message.edit_text(texto, reply_markup=criar_keyboard_voltar(), parse_mode="Markdown")
+        except Exception:
+            await message.answer(texto, reply_markup=criar_keyboard_voltar(), parse_mode="Markdown")
 
 # ===============================================
 # MIDDLEWARE DE AUTENTICAÇÃO
@@ -90,6 +135,11 @@ def require_auth(handler):
 async def start_handler(message: Message, state: FSMContext):
     """Handler do comando /start - CORRIGIDO"""
     try:
+         # Processar parâmetro no comando /start (ex: QR Code)
+        if message.text and len(message.text.split(" ", 1)) > 1:
+            if await processar_qr_code_start(message, message.text):
+                return
+            
         chat_id = str(message.chat.id)
         
         # Verificar se usuário já está autenticado
@@ -189,6 +239,36 @@ async def processar_data_nascimento(message: Message, state: FSMContext):
         await state.clear()
 
 
+async def mostrar_menu_principal(message: Message, nome: str):
+    """Exibe o menu principal do bot"""
+    try:
+        texto = MessageTemplates.main_menu(nome)
+        await message.answer(texto, reply_markup=criar_menu_principal())
+    except Exception as e:
+        logger.error(f"❌ Erro ao mostrar menu principal: {e}")
+        await message.answer(MessageTemplates.error_generic())
+
+
+async def mostrar_menu_checklists(message: Message):
+    """Exibe menu de checklists"""
+    try:
+        texto = MessageTemplates.checklist_list_header()
+        await message.answer(texto, reply_markup=criar_keyboard_voltar())
+    except Exception as e:
+        logger.error(f"❌ Erro ao mostrar menu de checklists: {e}")
+        await message.answer(MessageTemplates.error_generic())
+
+
+async def mostrar_menu_equipamentos(message: Message):
+    """Exibe menu de equipamentos"""
+    try:
+        texto = MessageTemplates.feature_under_development()
+        await message.answer(texto, reply_markup=criar_keyboard_voltar())
+    except Exception as e:
+        logger.error(f"❌ Erro ao mostrar menu de equipamentos: {e}")
+        await message.answer(MessageTemplates.error_generic())
+
+
 def register_checklist_handlers(dp: Dispatcher):
     """Registra handlers de checklist separadamente - CORRIGIDO"""
     try:
@@ -201,46 +281,26 @@ def register_checklist_handlers(dp: Dispatcher):
         logger.error(f"❌ Erro ao registrar handlers de checklist: {e}")
 
 @require_auth
-async def callback_handler(callback: CallbackQuery, **kwargs):
-    """Handler geral para callbacks - ASSINATURA CORRIGIDA"""
+async def callback_handler(callback: CallbackQuery, operador: dict, **kwargs):
+    """Handler geral para callbacks"""
     data = callback.data
-    chat_id = str(callback.message.chat.id)
     
     try:
         await callback.answer()  # Confirmar callback
         
         if data == "menu_refresh":
-            if verificar_autenticacao(chat_id):
-                operador = obter_operador_sessao(chat_id)
-                await mostrar_menu_principal(callback.message, operador['nome'])
-            else:
-                await callback.message.edit_text(MessageTemplates.unauthorized_access())
-                
+            await mostrar_menu_principal(callback.message, operador.get('nome', ''))
+            
         elif data == "menu_checklists":
-            await mostrar_menu_checklists(callback.message)
+            await mostrar_menu_checklists(callback.message, operador)
             
         elif data == "menu_equipamentos":
-            await mostrar_menu_equipamentos(callback.message)
+            await mostrar_menu_equipamentos(callback.message, operador)
             
         elif data == "menu_help":
             await callback.message.edit_text(MessageTemplates.help_message())
             
-        elif data == "scan_qr":
-            # Instrução para escanear QR Code
-            texto = """📱 **Escanear QR Code**
-
-Para escanear um QR Code:
-1. Tire uma foto do QR Code do equipamento
-2. Ou use o comando: /start eq_UUID_DO_EQUIPAMENTO
-
-Exemplo: /start eq_123e4567-e89b-12d3-a456-426614174000"""
-
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🏠 Menu Principal", callback_data="menu_refresh")]
-            ])
-            
-            await callback.message.edit_text(texto, reply_markup=keyboard)
-            
+        
     except Exception as e:
         logger.error(f"❌ Erro no callback: {e}")
         try:
@@ -337,9 +397,5 @@ def register_handlers(dp: Dispatcher):
     # Callbacks gerais
     dp.callback_query.register(callback_handler, F.data.startswith("menu_"))
     dp.callback_query.register(admin_callback_handler, F.data.startswith("admin_"))
-    
-    # Callbacks de lista/navegação
-    dp.callback_query.register(callback_handler, F.data.startswith("list_"))
-    dp.callback_query.register(callback_handler, F.data.in_({"scan_qr"}))
     
     logger.info("✅ Handlers principais registrados")

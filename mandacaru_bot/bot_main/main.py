@@ -44,13 +44,13 @@ async def create_bot() -> tuple[Bot, Dispatcher]:
     dp = Dispatcher()
 
     # Registro único e ordenado dos handlers
-    register_main_handlers(dp)
-    register_admin_handlers(dp)            # seguro (fallback no-op)
+    register_qrcode_handlers(dp)
     register_checklist_handlers(dp)
     register_abastecimento_handlers(dp)
     register_os_handlers(dp)
     register_financeiro_handlers(dp)
-    register_qrcode_handlers(dp)
+    register_admin_handlers(dp)            # seguro (fallback no-op)
+    register_main_handlers(dp)
 
     logger.info("✅ Bot e dispatcher configurados")
     return bot, dp

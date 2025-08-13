@@ -82,20 +82,41 @@ async def buscar_operador_por_nome(nome: str) -> Optional[Dict[str, Any]]:
     return None
 
 async def buscar_operador_por_chat_id(chat_id: str) -> Optional[Dict[str, Any]]:
-    """Busca operador pelo chat_id do Telegram usando endpoint correto"""
     logger.info(f"🔍 Buscando operador por chat_id: {chat_id}")
 
-    # Usar endpoint específico /api/operadores/por-chat-id/
-    result = await fazer_requisicao_api('GET', 'operadores/por-chat-id/', params={'chat_id': chat_id})
+
+    # Primeiro tenta endpoint específico
+    result = await fazer_requisicao_api(
+        'GET', 'operadores/por-chat-id/', params={'chat_id': chat_id}
+    )
 
     if result and result.get('success'):
         operador = result.get('operador')
-        logger.info(f"✅ Operador encontrado por chat_id: {operador.get('nome')}")
-        return operador
-    else:
-        error_msg = result.get('error', 'Erro desconhecido') if result else 'Sem resposta'
-        logger.warning(f"⚠️ Operador não encontrado para chat_id {chat_id}: {error_msg}")
-        return None
+        if operador:
+            logger.info(
+                f"✅ Operador encontrado por chat_id: {operador.get('nome')}"
+            )
+            return operador
+
+    # Fallback para busca geral por parâmetro
+    result = await fazer_requisicao_api(
+        'GET', 'operadores/', params={'chat_id_telegram': chat_id}
+    )
+
+    if result and result.get('results'):
+        operadores = result['results']
+        if operadores:
+            operador = operadores[0]
+            logger.info(
+                f"✅ Operador encontrado por chat_id: {operador.get('nome')}"
+            )
+            return operador
+
+    error_msg = result.get('error', 'Operador não encontrado') if result else 'Sem resposta'
+    logger.warning(
+        f"⚠️ Operador não encontrado para chat_id {chat_id}: {error_msg}"
+    )
+    return None
 
 async def atualizar_chat_id_operador(operador_id: int, chat_id: str) -> bool:
     """Atualiza o chat_id do operador"""
@@ -110,22 +131,6 @@ async def atualizar_chat_id_operador(operador_id: int, chat_id: str) -> bool:
     else:
         logger.error(f"❌ Erro ao atualizar chat_id do operador {operador_id}")
         return False
-
-async def buscar_operador_por_chat_id(chat_id: str) -> Optional[Dict[str, Any]]:
-    """Busca operador pelo chat_id do Telegram"""
-    logger.info(f"🔍 Buscando operador por chat_id: {chat_id}")
-    
-    result = await fazer_requisicao_api('GET', 'operadores/', params={'chat_id_telegram': chat_id})
-    
-    if result and result.get('results'):
-        operadores = result['results']
-        if operadores:
-            operador = operadores[0]
-            logger.info(f"✅ Operador encontrado por chat_id: {operador.get('nome')}")
-            return operador
-    
-    logger.warning(f"⚠️ Operador não encontrado para chat_id: {chat_id}")
-    return None
 
 # ===============================================
 # FUNÇÕES DE EQUIPAMENTOS
@@ -218,17 +223,51 @@ async def listar_checklists_equipamento(equipamento_id: int) -> List[Dict[str, A
     logger.warning(f"⚠️ Nenhum checklist encontrado para equipamento {equipamento_id}")
     return []
 
-async def buscar_checklists_nr12() -> List[Dict[str, Any]]:
-    """Busca todos os checklists NR12 disponíveis"""
-    logger.info("🔍 Buscando checklists NR12")
-    
-    result = await fazer_requisicao_api('GET', 'nr12/checklists/')
-    
+async def buscar_equipamentos_com_nr12(
+    operador_id: int = None,
+) -> List[Dict[str, Any]]:
+    """Busca equipamentos que possuem NR12 configurado"""
+    logger.info("🔍 Buscando equipamentos com NR12")
+
+    params: Dict[str, Any] = {'tem_nr12': True}
+    if operador_id:
+        params['operador_id'] = operador_id
+
+    result = await fazer_requisicao_api('GET', 'equipamentos/', params=params)
+
     if result:
-        checklists = result.get('results', []) if isinstance(result, dict) else result
+        equipamentos = result.get('results', [])
+        logger.info(
+            f"✅ {len(equipamentos)} equipamentos com NR12 encontrados"
+        )
+        return equipamentos
+
+    logger.warning("⚠️ Nenhum equipamento com NR12 encontrado")
+    return []
+
+async def buscar_checklists_nr12(
+    equipamento_id: int = None,
+    operador_id: int = None,
+    status: str = None,
+) -> List[Dict[str, Any]]:
+    """Busca checklists NR12, com filtros opcionais"""
+    logger.info("🔍 Buscando checklists NR12")
+
+    params: Dict[str, Any] = {}
+    if equipamento_id:
+        params['equipamento'] = equipamento_id
+    if operador_id:
+        params['operador_id'] = operador_id
+    if status:
+        params['status'] = status
+
+    result = await fazer_requisicao_api('GET', 'nr12/checklists/', params=params)
+
+    if result:
+        checklists = result.get('results', [])
         logger.info(f"✅ {len(checklists)} checklists encontrados")
         return checklists
-    
+
     logger.warning("⚠️ Nenhum checklist NR12 encontrado")
     return []
 
@@ -368,65 +407,3 @@ async def buscar_operador_por_codigo(codigo: str) -> Optional[Dict[str, Any]]:
 
     logger.warning(f"⚠️ Operador não encontrado para código: {codigo}")
     return None
-    
-
-# FUNÇÕES NR12 (ADICIONADAS)
-async def buscar_equipamentos_com_nr12(operador_id=None):
-    try:
-        url = '/equipamentos/'
-        params = {'tem_nr12': True}
-        if operador_id:
-            params['operador_id'] = operador_id
-        data = await fazer_requisicao_api('GET', url, params=params)
-        return data.get('results', []) if data else []
-    except Exception as e:
-        logger.error(f'Erro ao buscar equipamentos NR12: {e}')
-        return []
-
-async def buscar_checklists_nr12(equipamento_id=None, operador_id=None, status=None):
-    try:
-        url = '/nr12/checklists/'
-        params = {}
-        if equipamento_id: params['equipamento'] = equipamento_id
-        if operador_id: params['operador_id'] = operador_id
-        if status: params['status'] = status
-        data = await fazer_requisicao_api('GET', url, params=params)
-        return data.get('results', []) if data else []
-    except Exception as e:
-        logger.error(f'Erro ao buscar checklists: {e}')
-        return []
-
-async def criar_checklist_nr12(dados):
-    try:
-        data = await fazer_requisicao_api('POST', '/nr12/checklists/', json=dados)
-        return data
-    except Exception as e:
-        logger.error(f'Erro ao criar checklist: {e}')
-        return None
-
-async def buscar_itens_checklist_nr12(checklist_id):
-    try:
-        data = await fazer_requisicao_api('GET', f'/nr12/checklists/{checklist_id}/itens/')
-        return data.get('results', []) if data else []
-    except Exception as e:
-        logger.error(f'Erro ao buscar itens: {e}')
-        return []
-
-async def atualizar_item_checklist_nr12(item_id, resposta_data):
-    try:
-        await fazer_requisicao_api('PATCH', f'/nr12/itens-checklist/{item_id}/', json=resposta_data)
-        return True
-    except Exception as e:
-        logger.error(f'Erro ao atualizar item: {e}')
-        return False
-
-async def finalizar_checklist_nr12(checklist_id):
-    try:
-        data = await fazer_requisicao_api('POST', f'/nr12/checklists/{checklist_id}/finalizar/', json={})
-        return data
-    except Exception as e:
-        logger.error(f'Erro ao finalizar: {e}')
-        return None
-
-    logger.info(f"✅ Operador {nome} validado com sucesso")
-    return operador

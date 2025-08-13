@@ -104,7 +104,7 @@ async def mostrar_relatorio_checklist(callback: CallbackQuery, operador=None):
                 "❌ **Checklist Não Encontrado**\n\n"
                 "Não foi possível carregar os dados do checklist.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="list_checklists")]
+                    [InlineKeyboardButton(text="🔙 Voltar", callback_data="menu_checklists")]
                 ])
             )
             return
@@ -170,7 +170,7 @@ async def mostrar_relatorio_checklist(callback: CallbackQuery, operador=None):
         
         # Navegação
         keyboard.append([
-            InlineKeyboardButton(text="🔙 Voltar", callback_data="list_checklists"),
+            InlineKeyboardButton(text="🔙 Voltar", callback_data="menu_checklists"),
             InlineKeyboardButton(text="🏠 Menu", callback_data="menu_refresh")
         ])
         
