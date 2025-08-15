@@ -11,6 +11,7 @@ from .viewsets import (
     ChecklistNR12ViewSet,
     ItemChecklistRealizadoViewSet,
     AlertaManutencaoViewSet,
+    ChecklistsAbertosPorChatView
 )
 
 # Tentar importar views_bot
@@ -42,6 +43,7 @@ if BOT_VIEWS_AVAILABLE:
         # Endpoints específicos para o bot
         path('checklists/', checklists_bot, name='nr12-checklists-bot'),
         path('operadores/<int:operador_id>/equipamentos/', equipamentos_operador, name='nr12-equipamentos-operador'),
+        path('checklists/abertos/', ChecklistsAbertosPorChatView.as_view(), name='checklists-abertos'),
     ]
 
 # ================================================================

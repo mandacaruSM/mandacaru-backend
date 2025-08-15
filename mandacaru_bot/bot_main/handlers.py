@@ -249,8 +249,17 @@ async def mostrar_menu_principal(message: Message, nome: str):
         await message.answer(MessageTemplates.error_generic())
 
 
-async def mostrar_menu_checklists(message: Message):
-    """Exibe menu de checklists"""
+async def mostrar_menu_checklists(message: Message, operador: dict):
+    """Exibe menu de checklists.
+
+    Parameters
+    ----------
+    message: Message
+        Mensagem enviada pelo Telegram.
+    operador: dict
+        Operador autenticado (não utilizado, mas mantido para
+        compatibilidade com outros módulos).
+    """
     try:
         texto = MessageTemplates.checklist_list_header()
         await message.answer(texto, reply_markup=criar_keyboard_voltar())
@@ -259,8 +268,17 @@ async def mostrar_menu_checklists(message: Message):
         await message.answer(MessageTemplates.error_generic())
 
 
-async def mostrar_menu_equipamentos(message: Message):
-    """Exibe menu de equipamentos"""
+async def mostrar_menu_equipamentos(message: Message, operador: dict):
+    """Exibe menu de equipamentos.
+
+    Parameters
+    ----------
+    message: Message
+        Mensagem enviada pelo Telegram.
+    operador: dict
+        Operador autenticado (não utilizado, mas mantido para
+        compatibilidade com outros módulos).
+    """
     try:
         texto = MessageTemplates.feature_under_development()
         await message.answer(texto, reply_markup=criar_keyboard_voltar())

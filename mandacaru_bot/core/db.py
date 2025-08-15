@@ -245,31 +245,41 @@ async def buscar_equipamentos_com_nr12(
     logger.warning("⚠️ Nenhum equipamento com NR12 encontrado")
     return []
 
-async def buscar_checklists_nr12(
-    equipamento_id: int = None,
-    operador_id: int = None,
-    status: str = None,
-) -> List[Dict[str, Any]]:
-    """Busca checklists NR12, com filtros opcionais"""
+async def buscar_checklists_nr12(equipamento_id: int = None,
+                                 operador_id: int = None,
+                                 responsavel_id: int = None,
+                                 status: str = None) -> List[Dict[str, Any]]:
     logger.info("🔍 Buscando checklists NR12")
-
     params: Dict[str, Any] = {}
-    if equipamento_id:
-        params['equipamento'] = equipamento_id
-    if operador_id:
-        params['operador_id'] = operador_id
-    if status:
-        params['status'] = status
+    if equipamento_id: params['equipamento'] = equipamento_id
+    if status:         params['status'] = status
+
+    if responsavel_id:
+        params['responsavel_id'] = responsavel_id
+    elif operador_id:
+        # pega o Operador e extrai o user_id (UsuarioCliente)
+        op = await fazer_requisicao_api('GET', f'operadores/{operador_id}/')
+        if not op or not op.get('user_id'):
+            logger.warning("⚠️ operador_id sem user_id; retorno vazio")
+            return []
+        params['responsavel_id'] = op['user_id']
 
     result = await fazer_requisicao_api('GET', 'nr12/checklists/', params=params)
+    return result.get('results', []) if result else []
 
-    if result:
-        checklists = result.get('results', [])
-        logger.info(f"✅ {len(checklists)} checklists encontrados")
-        return checklists
+async def listar_checklists_abertos_por_chat(chat_id: str) -> List[Dict[str, Any]]:
+    op = await buscar_operador_por_chat_id(chat_id)
+    logger.info(f"user_id={op.get('user_id')}")
+    if not op:
+        return []
+    user_id = op.get('user_id') or (op.get('user', {}) or {}).get('id')
+    if not user_id:
+        return []
 
-    logger.warning("⚠️ Nenhum checklist NR12 encontrado")
-    return []
+    abertos: List[Dict[str, Any]] = []
+    for st in ('EM_ANDAMENTO', 'PENDENTE'):
+        abertos += await buscar_checklists_nr12(responsavel_id=user_id, status=st)
+    return abertos
 
 async def criar_checklist_nr12(equipamento_id: int, operador_id: int) -> Optional[Dict[str, Any]]:
     """Cria novo checklist NR12"""
@@ -282,7 +292,7 @@ async def criar_checklist_nr12(equipamento_id: int, operador_id: int) -> Optiona
     }
     
     result = await fazer_requisicao_api('POST', 'nr12/checklists/', data=data)
-    
+    logger.debug(f"➡️ {method} {url} params={params} data={data}")
     if result:
         logger.info(f"✅ Checklist criado com ID: {result.get('id')}")
     else:
@@ -342,24 +352,26 @@ async def atualizar_item_checklist_nr12(
         logger.error(f"❌ Erro ao atualizar item {item_id}: {result.get('error', 'Erro desconhecido') if result else 'Sem resposta'}")
         return False
 
-async def finalizar_checklist_nr12(checklist_id: int, operador_codigo: str) -> bool:
-    """Finaliza checklist NR12"""
-    logger.info(f"🏁 Finalizando checklist {checklist_id}")
-    
+async def finalizar_checklist_nr12(equipamento_id: int, operador_codigo: str) -> bool:
+    """Finaliza checklist NR12 para um equipamento"""
+    logger.info(f"🏁 Finalizando checklist do equipamento {equipamento_id}")
+
     data = {
-        'acao': 'finalizar_checklist',
-        'checklist_id': checklist_id,
+        'action': 'finalizar_checklist',
         'operador_codigo': operador_codigo
     }
-    
-    # Usar endpoint genérico do bot para finalizar
-    result = await fazer_requisicao_api('POST', f'nr12/bot/equipamento/{checklist_id}/', data=data)
-    
-    if result and result.get('success'):
-        logger.info(f"✅ Checklist {checklist_id} finalizado")
+
+    # Endpoint do bot utiliza o ID do equipamento
+    result = await fazer_requisicao_api('POST', f'nr12/bot/equipamento/{equipamento_id}/', data=data)
+
+    if result and not result.get('error'):
+        logger.info(f"✅ Checklist do equipamento {equipamento_id} finalizado")
         return True
     else:
-        logger.error(f"❌ Erro ao finalizar checklist {checklist_id}")
+        logger.error(
+            f"❌ Erro ao finalizar checklist do equipamento {equipamento_id}: "
+            f"{result.get('error', 'Sem resposta') if result else 'Sem resposta'}"
+        )
         return False
 
 # ===============================================
